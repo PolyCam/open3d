@@ -15,12 +15,10 @@ add_library(${TARGET} STATIC ${SRCS})
 target_include_directories(${TARGET}
 PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/inc>
 )
 target_include_directories(${TARGET}
 PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/zip>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/zip>
 )
 
 # ==================================================================================================
