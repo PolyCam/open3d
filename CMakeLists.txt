@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.19)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED yes)
+set(ENABLE_EXCEPTIONS yes)
+set(ENABLE_RTTI yes)
+
 project(open3d)
 
 set(TARGET open3d)
