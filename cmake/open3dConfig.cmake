@@ -1,0 +1,12 @@
+include(CMakeFindDependencyMacro)
+find_dependency(PNG)
+find_dependency(tinygltf CONFIG)
+find_dependency(Eigen3 CONFIG)
+find_dependency(fmt CONFIG)
+find_dependency(jsoncpp CONFIG)
+find_dependency(Qhull CONFIG)
+find_dependency(rply CONFIG)
+find_dependency(tinyobjloader CONFIG)
+find_dependency(lz4 CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/open3dTargets.cmake")
