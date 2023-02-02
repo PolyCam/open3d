@@ -33,6 +33,8 @@ target_include_directories(${TARGET} PRIVATE
 if(UNIX OR MINGW)
     target_compile_options(${TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fpermissive -w>) # Eigen generates deprecated warnings due to
         # use of std::result and this silences those.
+elseif(MSVC)
+    add_definitions(-D_USE_MATH_DEFINES -DNOMINMAX)
 endif()
 
 # ==================================================================================================
