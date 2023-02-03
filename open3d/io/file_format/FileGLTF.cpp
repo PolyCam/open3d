@@ -356,7 +356,9 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
                   triangle_uvs_.emplace_back(mesh_temp.triangle_uvs_[face[v]]);
               }
               mesh_temp.triangle_uvs_ = std::move(triangle_uvs_);
-              mesh_temp.vertices_uvs_idx_ = std::vector<int>(mesh_temp.triangle_uvs_.size(), -1);
+              mesh_temp.vertices_uvs_idx_.resize(mesh_temp.triangle_uvs_.size());
+              for (int i = 0; i < mesh_temp.triangle_uvs_.size(); i++)
+                mesh_temp.vertices_uvs_idx_[i] = i;
             }
           }
           if (gltf_material.normalTexture.index >= 0) {
