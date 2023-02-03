@@ -256,7 +256,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
   // we are less strict and allows writing to uvs without known material
   // potentially this will be useful for exporting conformal map generation
-  write_triangle_uvs = write_triangle_uvs && mesh.HasTriangleUvs();
+  write_triangle_uvs = write_triangle_uvs && mesh.HasTriangleUvs_Any();
 
   // write material filename only when uvs is written or has textures
   if (write_triangle_uvs) {

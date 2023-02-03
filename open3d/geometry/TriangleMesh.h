@@ -86,6 +86,10 @@ class TriangleMesh : public MeshBase {
     return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
   }
 
+  bool HasTriangleUvs_Any() const {
+    return HasTriangles() && !vertices_uvs_idx_.empty() && vertices_uvs_idx_.size() == triangle_uvs_.size() && (triangle_uvs_.size() <= 3 * triangles_.size() || triangle_uvs_.size() <= vertices_.size());
+  }
+
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
     bool is_all_texture_valid = std::accumulate(textures_.begin(), textures_.end(), true, [](bool a, const Image &b) { return a && !b.IsEmpty(); });
@@ -649,6 +653,8 @@ class TriangleMesh : public MeshBase {
   std::vector<std::unordered_set<int>> adjacency_list_;
   /// List of uv coordinates per triangle.
   std::vector<Eigen::Vector2d> triangle_uvs_;
+  /// Optional (added by polycam). Valid if same length as triangles_uvs_. Lists corresponding triangle index.
+  std::vector<Eigen::Vector2i> triangle_uvs_idx_;
 
   struct Material {
     struct MaterialParameter {
@@ -731,6 +737,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
+      double texture_idx = -1; // If this material should point to a texture, provide the idx
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
