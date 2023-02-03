@@ -87,6 +87,10 @@ class TriangleMesh : public MeshBase {
   }
 
   bool HasTriangleUvs_Any() const {
+    for (size_t i : vertices_uvs_idx_) {
+      if (i < 0)
+        return false;
+    }
     return HasTriangles() && !vertices_uvs_idx_.empty() && vertices_uvs_idx_.size() == triangle_uvs_.size() && (triangle_uvs_.size() <= 3 * triangles_.size() || triangle_uvs_.size() <= vertices_.size());
   }
 
@@ -654,7 +658,7 @@ class TriangleMesh : public MeshBase {
   /// List of uv coordinates per triangle.
   std::vector<Eigen::Vector2d> triangle_uvs_;
   /// Optional (added by polycam). Valid if same length as triangles_uvs_. Lists corresponding triangle index.
-  std::vector<Eigen::Vector2i> triangle_uvs_idx_;
+  std::vector<int> vertices_uvs_idx_;
 
   struct Material {
     struct MaterialParameter {
