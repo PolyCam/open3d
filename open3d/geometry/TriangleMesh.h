@@ -87,11 +87,14 @@ class TriangleMesh : public MeshBase {
   }
 
   bool HasTriangleUvs_Any() const {
-    for (size_t i : vertices_uvs_idx_) {
-      if (i < 0)
-        return false;
+    bool valid_uv = false;
+    for (const auto &tri : triangles_uvs_idx_) {
+      if (tri(0) < 0 || tri(1) < 0 || tri(2) < 0)
+        continue;
+      valid_uv = true;
+      break;
     }
-    return HasTriangles() && !vertices_uvs_idx_.empty() && vertices_uvs_idx_.size() == triangle_uvs_.size() && (triangle_uvs_.size() <= 3 * triangles_.size() || triangle_uvs_.size() <= vertices_.size());
+    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangles_uvs_.empty();
   }
 
   /// Returns `true` if the mesh has texture.
@@ -657,8 +660,8 @@ class TriangleMesh : public MeshBase {
   std::vector<std::unordered_set<int>> adjacency_list_;
   /// List of uv coordinates per triangle.
   std::vector<Eigen::Vector2d> triangle_uvs_;
-  /// Optional (added by polycam). Valid if same length as triangles_uvs_. Lists corresponding triangle index.
-  std::vector<int> vertices_uvs_idx_;
+  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx
+  std::vector<Eigen::Vector3i> triangles_uvs_idx_;
 
   struct Material {
     struct MaterialParameter {

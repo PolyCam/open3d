@@ -325,6 +325,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               }
               break;
           }
+          mesh_temp.triangles_uvs_idx_ = std::vector<Eigen::Vector3i>(mesh_temp.triangles_.size(), Eigen::Vector3i::Constant(-1));
         }
 
         // read texture and material
@@ -352,13 +353,12 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
                 const Eigen::Vector3i &face = mesh_temp.triangles_[i];
-                for (int v = 0; v < 3; ++v)
+                for (int v = 0; v < 3; ++v) {
+                  mesh_temp.triangles_uvs_idx_[i](v) = triangle_uvs_.size();
                   triangle_uvs_.emplace_back(mesh_temp.triangle_uvs_[face[v]]);
+                }
               }
               mesh_temp.triangle_uvs_ = std::move(triangle_uvs_);
-              mesh_temp.vertices_uvs_idx_.resize(mesh_temp.triangle_uvs_.size());
-              for (int i = 0; i < mesh_temp.triangle_uvs_.size(); i++)
-                mesh_temp.vertices_uvs_idx_[i] = i;
             }
           }
           if (gltf_material.normalTexture.index >= 0) {
