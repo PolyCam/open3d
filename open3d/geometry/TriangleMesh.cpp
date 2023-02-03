@@ -81,8 +81,7 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     *this = mesh;
     return (*this);
   }
-  const bool has_textures =
-      HasTriangleUvs() && HasTextures() && HasTriangleMaterialIds() && mesh.HasTriangleUvs() && mesh.HasTextures() && mesh.HasTriangleMaterialIds();
+  const bool has_textures = mesh.HasTriangleUvs() && mesh.HasTextures() && mesh.HasTriangleMaterialIds();
   const size_t old_vert_num = vertices_.size();
   const size_t old_tri_num = triangles_.size();
   MeshBase::operator+=(mesh);
@@ -124,9 +123,6 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
 
     materials_.insert(mesh.materials_.begin(), mesh.materials_.end());
   } else {
-    triangle_uvs_.clear();
-    textures_.clear();
-
     size_t old_mat_id_num = triangle_material_ids_.size();
     triangle_material_ids_.resize(old_mat_id_num + mesh.triangle_material_ids_.size());
     for (size_t i = 0; i < mesh.triangle_material_ids_.size(); i++) {
