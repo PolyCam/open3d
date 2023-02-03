@@ -138,6 +138,14 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     }
 
     materials_.insert(mesh.materials_.begin(), mesh.materials_.end());
+
+    // Added by polycam for case when there is a mixture of textures & materials in gltf
+    if (mesh.triangles_.size() == mesh.triangles_uvs_idx_.size()) {
+      triangles_uvs_idx_.resize(old_tri_uv_num + mesh.triangles_uvs_idx_.size());
+      for (size_t i = 0; i < mesh.triangles_uvs_idx_.size(); i++) {
+        triangles_uvs_idx_[old_tri_uv_num + i] = mesh.triangles_uvs_idx_[i];
+      }
+    }
   }
   return (*this);
 }
