@@ -348,7 +348,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image));
-              material.gltfExtras.texture_idx = mesh.textures.size();
+              material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
                 const Eigen::Vector3i &face = mesh_temp.triangles_[i];
