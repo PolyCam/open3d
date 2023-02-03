@@ -295,8 +295,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // map faces with material ids
   std::map<int, std::vector<size_t>> material_id_faces_map;
   if (mesh.HasTriangleMaterialIds()) {
-    for (size_t i = 0; i < mesh.triangle_material_ids_.size(); ++i) {
-      int mi = mesh.triangle_material_ids_[i];
+    for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); ++i) {
+      int mi = mesh.triangle_material_texture_ids_[i];
       auto it = material_id_faces_map.find(mi);
       if (it == material_id_faces_map.end()) {
         material_id_faces_map[mi] = {i};
