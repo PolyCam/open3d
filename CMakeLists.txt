@@ -35,6 +35,7 @@ if(UNIX OR MINGW)
         # use of std::result and this silences those.
 elseif(MSVC)
     add_definitions(-D_USE_MATH_DEFINES -DNOMINMAX)
+    target_compile_options(${TARGET} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
 endif()
 
 # ==================================================================================================
