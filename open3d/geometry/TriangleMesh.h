@@ -94,7 +94,7 @@ class TriangleMesh : public MeshBase {
       valid_uv = true;
       break;
     }
-    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangles_uvs_.empty();
+    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
   }
 
   /// Returns `true` if the mesh has texture.
