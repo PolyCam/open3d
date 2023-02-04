@@ -120,7 +120,7 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     }
 
     add_triangle_material_ids_ = (int)old_tex_num;
-    add_triangles_uvs_idx_ = (int)old_tri_num;
+    add_triangles_uvs_idx_ = (int)old_tri_uv_num;
     add_triangle_material_texture_ids_ = (int)materials_.size();
   } else {
     add_triangle_material_ids_ = (int)materials_.size();
