@@ -370,20 +370,20 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     mtl_file << "# object name: " << object_name << "\n";
     int material_idx = 0;
     for (auto it : mesh.materials_) {
-      const geometry::TriangleMesh::Material &material = it->second;
+      const geometry::TriangleMesh::Material &material = it.second;
       int texture_idx = material.gltfExtras.texture_idx;
       std::string mtl_name = object_name + "_" + std::to_string(material_idx);
       std::string tex_name = object_name + "_" + std::to_string(texture_idx);
       if (texture_idx < 0) { // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
-        mtl_file << "Ka " << material.baseColor[0] << " " << material.baseColor[1] << " " << material.baseColor[2] << "\n";
+        mtl_file << "Ka " << material.baseColor.r() << " " << material.baseColor.g() << " " << material.baseColor.b() << "\n";
         mtl_file << "Kd 1.000 1.000 1.000\n";
         if (spectral.has_value())
-          mtl_file << "Ks " << spectral.Value()(0) << " " << spectral.Value()(1) << " " << spectral.Value()(2) << "\n";
+          mtl_file << "Ks " << spectral.value()(0) << " " << spectral.value()(1) << " " << spectral.value()(2) << "\n";
         else
           mtl_file << "Ks 0.000 0.000 0.000\n";
-        mtl_file << "Tr " << 1.0 - material.baseColor[3] << "\n";
+        mtl_file << "Tr " << 1.0 - material.baseColor.a() << "\n";
         mtl_file << "illum 1\n";
         mtl_file << "Ns 1.000000\n"; // Spectral exponent
         mtl_file << "map_Kd " << mtl_name << material_postfix << "\n";
