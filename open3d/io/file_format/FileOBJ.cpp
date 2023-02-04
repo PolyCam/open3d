@@ -376,13 +376,14 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       if (texture_idx < 0) { // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
-        mtl_file << "Ka " << material.baseColor.r() << " " << material.baseColor.g() << " " << material.baseColor.b() << "\n";
-        mtl_file << "Kd 0.000 0.000 0.000\n";
+        mtl_file << "Ka 0.000 0.000 0.000\n";
+        mtl_file << "Kd " << material.baseColor.r() << " " << material.baseColor.g() << " " << material.baseColor.b() << "\n";
         if (spectral.has_value())
           mtl_file << "Ks " << spectral.value()(0) << " " << spectral.value()(1) << " " << spectral.value()(2) << "\n";
         else
           mtl_file << "Ks 0.000 0.000 0.000\n";
         mtl_file << "d " << material.baseColor.a() << "\n";
+        mtl_file << "illum 1\n";
         mtl_file << "Ns 1.000000\n"; // Spectral exponent
       } else { // Texture
         mtl_file << "newmtl " << mtl_name << "\n";
