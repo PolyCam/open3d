@@ -386,7 +386,6 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         mtl_file << "Tr " << 1.0 - material.baseColor.a() << "\n";
         mtl_file << "illum 1\n";
         mtl_file << "Ns 1.000000\n"; // Spectral exponent
-        mtl_file << "map_Kd " << mtl_name << material_postfix << "\n";
       } else { // Texture
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
