@@ -368,11 +368,10 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
-    int material_idx = 0;
     for (auto it : mesh.materials_) {
       const geometry::TriangleMesh::Material &material = it.second;
       int texture_idx = material.gltfExtras.texture_idx;
-      std::string mtl_name = object_name + "_" + std::to_string(material_idx);
+      std::string mtl_name = object_name + "_" + it.first;
       std::string tex_name = object_name + "_" + std::to_string(texture_idx);
       if (texture_idx < 0) { // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
@@ -401,7 +400,6 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         if (material.roughness)
           mtl_file << "map_Pr " << mtl_name << "_roughness" << material_postfix << "\n";
       }
-      material_idx++;
     }
 
     // write textures (if existing)
