@@ -256,7 +256,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
   // we are less strict and allows writing to uvs without known material
   // potentially this will be useful for exporting conformal map generation
-  write_triangle_uvs = write_triangle_uvs && mesh.HasTriangleUvs();
+  write_triangle_uvs = write_triangle_uvs && mesh.HasTriangleUvs_Any();
 
   // write material filename only when uvs is written or has textures
   if (write_triangle_uvs) {
@@ -295,8 +295,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // map faces with material ids
   std::map<int, std::vector<size_t>> material_id_faces_map;
   if (mesh.HasTriangleMaterialIds()) {
-    for (size_t i = 0; i < mesh.triangle_material_ids_.size(); ++i) {
-      int mi = mesh.triangle_material_ids_[i];
+    for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); ++i) {
+      int mi = mesh.triangle_material_texture_ids_[i];
       auto it = material_id_faces_map.find(mi);
       if (it == material_id_faces_map.end()) {
         material_id_faces_map[mi] = {i};
@@ -320,13 +320,15 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     // write the corresponding faces
     for (auto tidx : it->second) {
       const Eigen::Vector3i &triangle = mesh.triangles_[tidx];
-      if (write_vertex_normals && write_triangle_uvs) {
-        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, 3 * tidx + 1, triangle(0) + 1, triangle(1) + 1,
-                  3 * tidx + 2, triangle(1) + 1, triangle(2) + 1, 3 * tidx + 3, triangle(2) + 1);
-      } else if (!write_vertex_normals && write_triangle_uvs) {
-        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, 3 * tidx + 1, triangle(1) + 1, 3 * tidx + 2, triangle(2) + 1,
-                  3 * tidx + 3);
-      } else if (write_vertex_normals && !write_triangle_uvs) {
+      const Eigen::Vector3i &triangle_uvs_idx = mesh.triangles_uvs_idx_[tidx];
+      bool write_triangle_uv = triangle_uvs_idx(0) >= 0 && triangle_uvs_idx(1) >= 0 && triangle_uvs_idx(2) >= 0;
+      if (write_vertex_normals && write_triangle_uv) {
+        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(0) + 1, triangle(1) + 1,
+                  triangle_uvs_idx(1) + 1, triangle(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1, triangle(2) + 1);
+      } else if (!write_vertex_normals && write_triangle_uv) {
+        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(1) + 1, triangle_uvs_idx(1) + 1, triangle(2) + 1,
+                  triangle_uvs_idx(2) + 1);
+      } else if (write_vertex_normals && !write_triangle_uv) {
         format_to(std::back_inserter(out), "f {}//{} {}//{} {}//{}\n", triangle(0) + 1, triangle(0) + 1, triangle(1) + 1, triangle(1) + 1,
                   triangle(2) + 1, triangle(2) + 1);
       } else {
@@ -346,7 +348,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
   //////
   // write mtl file when uvs are written
-  if (write_triangle_uvs) {
+  {
     // start to write to mtl and texture
     std::string parent_dir = utility::filesystem::GetFileParentDirectory(filename);
     std::string mtl_filename = parent_dir + object_name + ".mtl";
@@ -366,20 +368,32 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
-    for (size_t i = 0; i < mesh.textures_.size(); ++i) {
-      std::string mtl_name = object_name + "_" + std::to_string(i);
-      mtl_file << "newmtl " << mtl_name << "\n";
-      mtl_file << "Ka 0.000 0.000 0.000\n";
-      mtl_file << "Kd 1.000 1.000 1.000\n";
-      mtl_file << "Ks 0.000 0.000 0.000\n";
-      mtl_file << "Tr 0.000000\n";
-      mtl_file << "illum 1\n";
-      mtl_file << "Ns 1.000000\n";
-      mtl_file << "map_Kd " << mtl_name << material_postfix << "\n";
-      if (i < mesh.materials_.size()) {
-        auto it = mesh.materials_.begin();
-        std::advance(it, i);
-        const geometry::TriangleMesh::Material &material = it->second;
+    for (auto it : mesh.materials_) {
+      const geometry::TriangleMesh::Material &material = it.second;
+      int texture_idx = material.gltfExtras.texture_idx;
+      std::string mtl_name = object_name + "_" + it.first;
+      std::string tex_name = object_name + "_" + std::to_string(texture_idx);
+      if (texture_idx < 0) { // Solid color - not a texture
+        const auto &spectral = material.gltfExtras.emissiveFactor;
+        mtl_file << "newmtl " << mtl_name << "\n";
+        mtl_file << "Ka 0.000 0.000 0.000\n";
+        mtl_file << "Kd " << material.baseColor.r() << " " << material.baseColor.g() << " " << material.baseColor.b() << "\n";
+        if (spectral.has_value())
+          mtl_file << "Ks " << spectral.value()(0) << " " << spectral.value()(1) << " " << spectral.value()(2) << "\n";
+        else
+          mtl_file << "Ks 0.000 0.000 0.000\n";
+        mtl_file << "d " << material.baseColor.a() << "\n";
+        mtl_file << "illum 1\n";
+        mtl_file << "Ns 1.000000\n"; // Spectral exponent
+      } else { // Texture
+        mtl_file << "newmtl " << mtl_name << "\n";
+        mtl_file << "Ka 0.000 0.000 0.000\n";
+        mtl_file << "Kd 1.000 1.000 1.000\n";
+        mtl_file << "Ks 0.000 0.000 0.000\n";
+        mtl_file << "Tr 0.000000\n";
+        mtl_file << "illum 1\n";
+        mtl_file << "Ns 1.000000\n";
+        mtl_file << "map_Kd " << tex_name << material_postfix << "\n";
         if (material.normalMap)
           mtl_file << "normal " << mtl_name << "_norm" << material_postfix << "\n";
         if (material.ambientOcclusion)
@@ -394,8 +408,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       // Don't write images for which no face was seen.
       if (material_id_faces_map.find(i) == material_id_faces_map.end())
         return;
-      std::string mtl_name = object_name + "_" + std::to_string(i);
-      std::string tex_filename = parent_dir + mtl_name + material_postfix;
+      std::string tex_name = object_name + "_" + std::to_string(i);
+      std::string tex_filename = parent_dir + tex_name + material_postfix;
 
       if (!io::WriteImage(tex_filename, mesh.textures_[i])) {
         utility::LogWarning("Write OBJ successful, but failed to write texture file.");
@@ -406,19 +420,19 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         std::advance(it, i);
         const geometry::TriangleMesh::Material &material = it->second;
         if (material.normalMap) {
-          std::string tex_filename = parent_dir + mtl_name + "_norm" + material_postfix;
+          std::string tex_filename = parent_dir + tex_name + "_norm" + material_postfix;
           if (!io::WriteImage(tex_filename, *material.normalMap)) {
             utility::LogWarning("Write OBJ successful, but failed to write texture file.");
           }
         }
         if (material.ambientOcclusion) {
-          std::string tex_filename = parent_dir + mtl_name + "_occl" + material_postfix;
+          std::string tex_filename = parent_dir + tex_name + "_occl" + material_postfix;
           if (!io::WriteImage(tex_filename, *material.ambientOcclusion)) {
             utility::LogWarning("Write OBJ successful, but failed to write AO file.");
           }
         }
         if (material.roughness) {
-          std::string tex_filename = parent_dir + mtl_name + "_roughness" + material_postfix;
+          std::string tex_filename = parent_dir + tex_name + "_roughness" + material_postfix;
           if (!io::WriteImage(tex_filename, *material.roughness)) {
             utility::LogWarning("Write OBJ successful, but failed to write roughness map.");
           }

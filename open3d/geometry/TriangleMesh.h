@@ -86,6 +86,17 @@ class TriangleMesh : public MeshBase {
     return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
   }
 
+  bool HasTriangleUvs_Any() const {
+    bool valid_uv = false;
+    for (const auto &tri : triangles_uvs_idx_) {
+      if (tri(0) < 0 || tri(1) < 0 || tri(2) < 0)
+        continue;
+      valid_uv = true;
+      break;
+    }
+    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
+  }
+
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
     bool is_all_texture_valid = std::accumulate(textures_.begin(), textures_.end(), true, [](bool a, const Image &b) { return a && !b.IsEmpty(); });
@@ -649,6 +660,8 @@ class TriangleMesh : public MeshBase {
   std::vector<std::unordered_set<int>> adjacency_list_;
   /// List of uv coordinates per triangle.
   std::vector<Eigen::Vector2d> triangle_uvs_;
+  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx
+  std::vector<Eigen::Vector3i> triangles_uvs_idx_;
 
   struct Material {
     struct MaterialParameter {
@@ -731,6 +744,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
+      double texture_idx = -1; // If this material should point to a texture, provide the idx
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
@@ -746,6 +760,8 @@ class TriangleMesh : public MeshBase {
 
   /// List of material ids.
   std::vector<int> triangle_material_ids_;
+  /// List of material ids. If refers to a texture, material will point to the texture ID. (Added by polycam)
+  std::vector<int> triangle_material_texture_ids_;
   /// Textures of the image.
   std::vector<Image> textures_;
   /// Texture file names of the image (optional - if exist and are identical to the memory textures).

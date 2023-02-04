@@ -325,6 +325,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               }
               break;
           }
+          mesh_temp.triangles_uvs_idx_ = std::vector<Eigen::Vector3i>(mesh_temp.triangles_.size(), Eigen::Vector3i::Constant(-1));
         }
 
         // read texture and material
@@ -343,16 +344,20 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           material.gltfExtras.alphaMode = gltf_material.alphaMode;
           material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
           mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
+          mesh_temp.triangle_material_texture_ids_.resize(mesh_temp.triangles_.size(), 0);
           if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image));
+              material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
                 const Eigen::Vector3i &face = mesh_temp.triangles_[i];
-                for (int v = 0; v < 3; ++v)
+                for (int v = 0; v < 3; ++v) {
+                  mesh_temp.triangles_uvs_idx_[i](v) = triangle_uvs_.size();
                   triangle_uvs_.emplace_back(mesh_temp.triangle_uvs_[face[v]]);
+                }
               }
               mesh_temp.triangle_uvs_ = std::move(triangle_uvs_);
             }
