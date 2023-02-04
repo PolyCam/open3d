@@ -323,11 +323,11 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       const Eigen::Vector3i &triangle_uvs_idx = mesh.triangles_uvs_idx_[tidx];
       bool write_triangle_uv = triangle_uvs_idx(0) >= 0 && triangle_uvs_idx(1) >= 0 && triangle_uvs_idx(2) >= 0;
       if (write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, 3 * tidx + 1, triangle(0) + 1, triangle(1) + 1,
-                  3 * tidx + 2, triangle(1) + 1, triangle(2) + 1, 3 * tidx + 3, triangle(2) + 1);
+        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(0) + 1, triangle(1) + 1,
+                  triangle_uvs_idx(1) + 1, triangle(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1, triangle(2) + 1);
       } else if (!write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, 3 * tidx + 1, triangle(1) + 1, 3 * tidx + 2, triangle(2) + 1,
-                  3 * tidx + 3);
+        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(1) + 1, triangle_uvs_idx(1) + 1, triangle(2) + 1,
+                  triangle_uvs_idx(2) + 1);
       } else if (write_vertex_normals && !write_triangle_uv) {
         format_to(std::back_inserter(out), "f {}//{} {}//{} {}//{}\n", triangle(0) + 1, triangle(0) + 1, triangle(1) + 1, triangle(1) + 1,
                   triangle(2) + 1, triangle(2) + 1);
