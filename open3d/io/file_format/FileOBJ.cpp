@@ -259,9 +259,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   write_triangle_uvs = write_triangle_uvs && mesh.HasTriangleUvs_Any();
 
   // write material filename only when uvs is written or has textures
-  if (write_triangle_uvs) {
-    format_to(std::back_inserter(out), "mtllib {}.mtl\n", object_name.c_str());
-  }
+  format_to(std::back_inserter(out), "mtllib {}.mtl\n", object_name.c_str());
 
   write_vertex_normals = write_vertex_normals && mesh.HasVertexNormals();
   write_vertex_colors = write_vertex_colors && mesh.HasVertexColors();
@@ -283,12 +281,10 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
   // we don't compress uvs into vertex-wise representation.
   // loose triangle-wise representation is provided
-  if (write_triangle_uvs) {
-    for (auto &uv : mesh.triangle_uvs_) {
-      // Note CH: We reflect the y-coordinate of the UVs because this is necessary to achieve the correct
-      // orientation of the materials. We used to flip the materials instead, but this is faster.
-      format_to(std::back_inserter(out), "vt {:.6f} {:.6f}\n", uv(0), 1.0 - uv(1));
-    }
+  for (auto &uv : mesh.triangle_uvs_) {
+    // Note CH: We reflect the y-coordinate of the UVs because this is necessary to achieve the correct
+    // orientation of the materials. We used to flip the materials instead, but this is faster.
+    format_to(std::back_inserter(out), "vt {:.6f} {:.6f}\n", uv(0), 1.0 - uv(1));
   }
 
   // write faces with (possibly multiple) material ids
@@ -312,10 +308,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // enumerate ids and their corresponding faces
   for (auto it = material_id_faces_map.begin(); it != material_id_faces_map.end(); ++it) {
     // write the mtl name
-    if (write_triangle_uvs) {
-      std::string mtl_name = object_name + "_" + std::to_string(it->first);
-      format_to(std::back_inserter(out), "usemtl {}\n", mtl_name.c_str());
-    }
+    std::string mtl_name = object_name + "_" + std::to_string(it->first);
+    format_to(std::back_inserter(out), "usemtl {}\n", mtl_name.c_str());
 
     // write the corresponding faces
     for (auto tidx : it->second) {
