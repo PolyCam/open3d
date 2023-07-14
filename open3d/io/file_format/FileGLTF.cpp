@@ -64,10 +64,32 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
   }
 }
 
+static std::string GetMimeType(const tinygltf::Image &image) {
+  if(!image.mimeType.empty()) {
+    return(image.mimeType);
+  }
+  const auto extension_period_position = image.uri.rfind('.');
+  if(extension_period_position == std::string::npos) {
+    return("");
+  }
+  const auto extension = image.uri.substr(extension_period_position + 1u);
+  if(extension == "jpg" || extension == "jpeg") {
+    return("image/jpeg");
+  }
+  else if(extension == "png") {
+    return("image/png");
+  }
+  else if(extension == "basis") {
+    return("image/basis");
+  } else {
+    return("");
+  }
+}
+
 static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image) {
   geometry::Image open3d_image;
   if (tinygltf_image.as_is) {
-    open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, tinygltf_image.mimeType};
+    open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
     // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
     open3d_image.Prepare(1, 1, 3, 1);
     open3d_image.data_ = std::vector<uint8_t>(3, uint8_t(0));
