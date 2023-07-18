@@ -83,7 +83,7 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
         [&](const auto &pass_through) {
           using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
-            return (geometry::Image::EncodedData{image.pass_through_->data_, image.pass_through_->mime_type_});
+            return (geometry::Image::EncodedData{pass_through->data_, pass_through->mime_type_});
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
             return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), GetMimeType(pass_through)});
           }
@@ -101,7 +101,7 @@ static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLo
   geometry::Image open3d_image;
   if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && tinygltf_image.image.empty()) {
     //! @todo Make path absolute
-    open3d_image.pass_through_ = geometry::Image::AbsolutePath(inygltf_image.uri);
+    open3d_image.pass_through_ = geometry::Image::AbsolutePath(tinygltf_image.uri);
   } else if (tinygltf_image.as_is) {
     open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
     // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
