@@ -33,6 +33,10 @@ namespace open3d {
 namespace utility {
 namespace filesystem {
 
+std::string GetMimeType(const std::string &filename);
+
+bool AreEqual(const std::string &filename1, const std::string &filename2);
+
 std::string GetFileExtensionInLowerCase(const std::string &filename);
 
 std::string GetFileNameWithoutExtension(const std::string &filename);

@@ -88,7 +88,7 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             file_out.close();
             return true;
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
-            if(pass_through == filename) {
+            if(utility::filesystem::AreEqual(pass_through, filename)) {
               return true;
             }
             std::vector<char> buffer;

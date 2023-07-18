@@ -50,21 +50,9 @@ static std::string GetMimeType(const tinygltf::Image &image) {
   if (!image.mimeType.empty()) {
     return (image.mimeType);
   }
-  const auto extension_period_position = image.uri.rfind('.');
-  if (extension_period_position == std::string::npos) {
-    return ("");
-  }
-  const auto extension = image.uri.substr(extension_period_position + 1u);
-  if (extension == "jpg" || extension == "jpeg") {
-    return ("image/jpeg");
-  } else if (extension == "png") {
-    return ("image/png");
-  } else if (extension == "basis") {
-    return ("image/basis");
-  } else {
-    return ("");
-  }
+  return(utility::filesystem::GetMimeType(image.uri));
 }
+
 static std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
   auto stream = std::ifstream(path, std::ios::in | std::ios::binary);
   stream.seekg(0, std::ios::end);
@@ -85,7 +73,7 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
             return (geometry::Image::EncodedData{pass_through.data_, pass_through.mime_type_});
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
-            return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), GetMimeType(pass_through)});
+            return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), utility::filesystem::GetMimeType(pass_through)});
           }
         },
         *image.pass_through_));

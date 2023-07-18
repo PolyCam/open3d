@@ -58,6 +58,28 @@ namespace open3d {
 namespace utility {
 namespace filesystem {
 
+std::string GetMimeType(const std::string &filename) {
+  const auto extension = GetFileExtensionInLowerCase(filename);
+  if (extension == "jpg" || extension == "jpeg") {
+    return ("image/jpeg");
+  } else if (extension == "png") {
+    return ("image/png");
+  } else if (extension == "basis") {
+    return ("image/basis");
+  } else if (extension == "gltf") {
+    return ("model/gltf+json");
+  } else if (extension == "glb") {
+    return ("model/gltf-binary");
+  } else {
+    return ("");
+  }
+}
+
+bool AreEqual(const std::string &filename1, const std::string &filename2) {
+  return(std::equal(filename1.begin(), filename1.end(), filename2.begin(), filename2.end(),
+    [](char character1, char character2) { return(::tolower(character1) == ::tolower(character2)); }));
+}
+
 std::string GetFileExtensionInLowerCase(const std::string &filename) {
   size_t dot_pos = filename.find_last_of(".");
   if (dot_pos >= filename.length())
