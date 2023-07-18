@@ -29,6 +29,7 @@
 #include <Eigen/Core>
 #include <memory>
 #include <optional>
+#include <variant>
 #include <string>
 #include <vector>
 
@@ -226,17 +227,18 @@ class Image : public Geometry2D {
   /// Image storage buffer.
   std::vector<uint8_t> data_;
 
-  /// Pass through data read directly from an image file without decoding the file format.
+  /// Pass through data read directly from an image file without decoding the file format. Used as an optimization
+  /// to not decode and reencode texture images on load, modify, save cycles that only modify geometry but not
+  /// textures. Also stops image quality degradation problems on each cycle with lossy image formats such as JPEG.
   struct EncodedData {
     /// The data read directly from the file without decoding the file format.
     std::vector<uint8_t> data_;
     /// The mime type of the encoded data.
     std::string mime_type_;
   };
-  /// Pass through data read directly from an image file without decoding the file format. Used as an optimization
-  /// to not decode and reencode texture images on load, modify, save cycles that only modify geometry but not
-  /// textures. Also stops image quality degradation problems on each cycle with lossy image formats such as JPEG.
-  std::optional<EncodedData> pass_through_;
+  using AbsolutePath = std::string;
+  using PassThrough = std::variant<EncodedData, AbsolutePath>;
+  std::optional<PassThrough> pass_through_;
 };
 
 }  // namespace geometry

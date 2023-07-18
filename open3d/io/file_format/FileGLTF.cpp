@@ -46,49 +46,63 @@
 namespace open3d {
 namespace io {
 
+static std::string GetMimeType(const tinygltf::Image &image) {
+  if (!image.mimeType.empty()) {
+    return (image.mimeType);
+  }
+  const auto extension_period_position = image.uri.rfind('.');
+  if (extension_period_position == std::string::npos) {
+    return ("");
+  }
+  const auto extension = image.uri.substr(extension_period_position + 1u);
+  if (extension == "jpg" || extension == "jpeg") {
+    return ("image/jpeg");
+  } else if (extension == "png") {
+    return ("image/png");
+  } else if (extension == "basis") {
+    return ("image/basis");
+  } else {
+    return ("");
+  }
+}
+static std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
+  auto stream = std::ifstream(path, std::ios::in | std::ios::binary);
+  stream.seekg(0, std::ios::end);
+  auto size = stream.tellg();
+  stream.seekg(0);
+  std::vector<uint8_t> buffer(size);
+  stream.read((char *)buffer.data(), size);
+  stream.close();
+  return (buffer);
+}
+
 static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, const std::string &temporary_file_path,
                                                 const std::string temporary_file_mime_type = "image/jpeg") {
   if (image.pass_through_.has_value()) {
-    return (geometry::Image::EncodedData{image.pass_through_->data_, image.pass_through_->mime_type_});
+    return (std::visit(
+        [&](const auto &pass_through) {
+          using PassThroughType = std::decay<decltype(pass_through)>::type;
+          if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
+            return (geometry::Image::EncodedData{image.pass_through_->data_, image.pass_through_->mime_type_});
+          } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
+            return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), GetMimeType(pass_through)});
+          }
+        },
+        *image.pass_through_));
   } else {
     io::WriteImage(temporary_file_path, image);
-    auto stream = std::ifstream(temporary_file_path, std::ios::in | std::ios::binary);
-    stream.seekg(0, std::ios::end);
-    auto size = stream.tellg();
-    stream.seekg(0);
-    std::vector<uint8_t> buffer(size);
-    stream.read((char *)buffer.data(), size);
-    stream.close();
+    auto buffer = ReadFileIntoBuffer(temporary_file_path);
     utility::filesystem::RemoveFile(temporary_file_path);
     return (geometry::Image::EncodedData{std::move(buffer), temporary_file_mime_type});
   }
 }
 
-static std::string GetMimeType(const tinygltf::Image &image) {
-  if(!image.mimeType.empty()) {
-    return(image.mimeType);
-  }
-  const auto extension_period_position = image.uri.rfind('.');
-  if(extension_period_position == std::string::npos) {
-    return("");
-  }
-  const auto extension = image.uri.substr(extension_period_position + 1u);
-  if(extension == "jpg" || extension == "jpeg") {
-    return("image/jpeg");
-  }
-  else if(extension == "png") {
-    return("image/png");
-  }
-  else if(extension == "basis") {
-    return("image/basis");
-  } else {
-    return("");
-  }
-}
-
-static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image) {
+static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLoadMode texture_load_mode) {
   geometry::Image open3d_image;
-  if (tinygltf_image.as_is) {
+  if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && tinygltf_image.image.empty()) {
+    //! @todo Make path absolute
+    open3d_image.pass_through_ = geometry::Image::AbsolutePath(inygltf_image.uri);
+  } else if (tinygltf_image.as_is) {
     open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
     // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
     open3d_image.Prepare(1, 1, 3, 1);
@@ -182,7 +196,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
   tinygltf::TinyGLTF loader;
   std::string warn;
   std::string err;
-  switch(texture_load_mode) {
+  switch (texture_load_mode) {
     case TextureLoadMode::normal: {
       loader.SetImageLoader(LoadImageData, NULL);
       break;
@@ -389,7 +403,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image));
+              mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode));
               material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
@@ -407,7 +421,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image));
+              material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image, texture_load_mode));
             }
           }
           if (gltf_material.occlusionTexture.index >= 0) {
@@ -415,7 +429,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image)));
+              material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode)));
             }
           }
 
@@ -424,7 +438,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image)));
+              material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode)));
             }
           }
         }
@@ -803,6 +817,15 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     utility::filesystem::MakeDirectoryHierarchy(path);
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(fileName);
   const bool bBinary(filename_ext == "glb");
+  auto has_ignored_external_textures = false;
+  for (const auto &texture : _mesh.textures_) {
+    if (texture.pass_through_.has_value()) {
+      if (std::get_if<geometry::Image::AbsolutePath>(&*texture.pass_through_) != nullptr) {
+        has_ignored_external_textures = true;
+        break;
+      }
+    }
+  }
 
   // split mesh such that the texture coordinates are per vertex instead of per
   // face
@@ -819,6 +842,13 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   tinygltf::Buffer gltfBuffer;
 
   auto add_image = [&](const geometry::Image &image, const std::string &temporary_file_name) {
+    if (has_ignored_external_textures && image.pass_through_.has_value()) {
+      const auto *absolute_path = std::get_if<geometry::Image::AbsolutePath>(&*image.pass_through_);
+      if (absolute_path != nullptr) {
+        //! @todo
+        return;
+      }
+    }
     const auto encoded_data = EncodeImage(image, path + temporary_file_name);
     tinygltf::Image gltf_image;
     gltf_image.mimeType = encoded_data.mime_type_;
