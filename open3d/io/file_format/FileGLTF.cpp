@@ -83,7 +83,7 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
         [&](const auto &pass_through) {
           using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
-            return (geometry::Image::EncodedData{pass_through->data_, pass_through->mime_type_});
+            return (geometry::Image::EncodedData{pass_through.data_, pass_through.mime_type_});
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
             return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), GetMimeType(pass_through)});
           }
