@@ -88,9 +88,12 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
   if (image.pass_through_.has_value()) {
     std::visit(
         [&](const auto &pass_through) {
-          using PassThroughType = std::decay<decltype(pass_through)>::type;
+          using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
             std::ofstream file_out(filename, std::ios::out | std::ios::binary);
+            if (!file_out.is_open()) {
+              return false;
+            }
             file_out.write(reinterpret_cast<const char *>(pass_through.data()), pass_through.size());
             file_out.close();
             return true;
@@ -103,6 +106,9 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
               return false;
             }
             std::ofstream file_out(filename, std::ios::out | std::ios::binary);
+            if (!file_out.is_open()) {
+              return false;
+            }
             file_out.write(buffer.data(), pass_through.size());
             file_out.close();
             return true;
