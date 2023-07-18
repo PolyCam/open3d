@@ -28,6 +28,7 @@
 
 #include <fstream>
 #include <unordered_map>
+#include <filesystem>
 
 #include "open3d/utility/Console.h"
 #include "open3d/utility/FileSystem.h"
@@ -88,20 +89,10 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             file_out.close();
             return true;
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
-            if(utility::filesystem::AreEqual(pass_through, filename)) {
+            if(std::filesystem::path(pass_through) == std::filesystem::path(filename)) {
               return true;
             }
-            std::vector<char> buffer;
-            if(!utility::filesystem::FReadToBuffer(filename, buffer, nullptr)) {
-              return false;
-            }
-            std::ofstream file_out(filename, std::ios::out | std::ios::binary);
-            if (!file_out.is_open()) {
-              return false;
-            }
-            file_out.write(buffer.data(), pass_through.size());
-            file_out.close();
-            return true;
+            return std::filesystem::copy_file(pass_through, filename);
           }
         },
         *image.pass_through_));

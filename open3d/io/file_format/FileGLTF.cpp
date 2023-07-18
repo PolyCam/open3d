@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <filesystem>
 #include <numeric>
 #include <vector>
 
@@ -50,7 +51,7 @@ static std::string GetMimeType(const tinygltf::Image &image) {
   if (!image.mimeType.empty()) {
     return (image.mimeType);
   }
-  return(utility::filesystem::GetMimeType(image.uri));
+  return (utility::filesystem::GetMimeType(image.uri));
 }
 
 static std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
@@ -85,11 +86,13 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
   }
 }
 
-static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLoadMode texture_load_mode) {
+static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLoadMode texture_load_mode,
+                                const std::filesystem::path &parent_directory) {
   geometry::Image open3d_image;
-  if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && tinygltf_image.image.empty()) {
-    //! @todo Make path absolute
-    open3d_image.pass_through_ = geometry::Image::AbsolutePath(tinygltf_image.uri);
+  if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && !tinygltf::IsDataURI(tinygltf_image.uri) &&
+      tinygltf_image.image.empty()) {
+    const auto absolute_path = std::filesystem::canonical(parent_directory / std::filesystem::path(tinygltf_image.uri));
+    open3d_image.pass_through_ = geometry::Image::AbsolutePath(absolute_path.string());
   } else if (tinygltf_image.as_is) {
     open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
     // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
@@ -179,6 +182,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
                                          TextureLoadMode texture_load_mode) {
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   const bool bBinary(filename_ext == "glb");
+  const auto parent_directory = std::filesystem::path(filename).parent_path();
 
   tinygltf::Model model;
   tinygltf::TinyGLTF loader;
@@ -391,7 +395,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode));
+              mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
               material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
@@ -409,7 +413,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image, texture_load_mode));
+              material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
             }
           }
           if (gltf_material.occlusionTexture.index >= 0) {
@@ -417,7 +421,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode)));
+              material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
             }
           }
 
@@ -426,7 +430,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode)));
+              material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
             }
           }
         }
@@ -798,6 +802,20 @@ static void InitializeGltfMaterial(tinygltf::Material &material, const geometry:
   }
 }
 
+static std::optional<tinygltf::Image> TrySkippedExternalTexture(const geometry::Image &image, const std::filesystem::path &parent_directory) {
+  if (image.pass_through_.has_value()) {
+    const auto *absolute_path = std::get_if<geometry::Image::AbsolutePath>(&*image.pass_through_);
+    if (absolute_path != nullptr) {
+      const auto relative_path = std::filesystem::relative(*absolute_path, parent_directory);
+      tinygltf::Image gltf_image;
+      gltf_image.uri = relative_path.string();
+      gltf_image.mimeType = utility::filesystem::GetMimeType(*absolute_path);
+      return (gltf_image);
+    }
+  }
+  return (std::optional<tinygltf::Image>());
+}
+
 // export the mesh as a GLTF file
 bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_mesh) {
   const std::string path = utility::filesystem::GetFileParentDirectory(fileName);
@@ -805,15 +823,6 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     utility::filesystem::MakeDirectoryHierarchy(path);
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(fileName);
   const bool bBinary(filename_ext == "glb");
-  auto has_ignored_external_textures = false;
-  for (const auto &texture : _mesh.textures_) {
-    if (texture.pass_through_.has_value()) {
-      if (std::get_if<geometry::Image::AbsolutePath>(&*texture.pass_through_) != nullptr) {
-        has_ignored_external_textures = true;
-        break;
-      }
-    }
-  }
 
   // split mesh such that the texture coordinates are per vertex instead of per
   // face
@@ -829,24 +838,23 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   tinygltf::Mesh gltfMesh;
   tinygltf::Buffer gltfBuffer;
 
+  const auto parent_directory = std::filesystem::path(fileName).parent_path();
   auto add_image = [&](const geometry::Image &image, const std::string &temporary_file_name) {
-    if (has_ignored_external_textures && image.pass_through_.has_value()) {
-      const auto *absolute_path = std::get_if<geometry::Image::AbsolutePath>(&*image.pass_through_);
-      if (absolute_path != nullptr) {
-        //! @todo
-        return;
-      }
+    auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
+    if (skipped_external_texture.has_value()) {
+      gltfModel.images.push_back(std::move(*skipped_external_texture));
+    } else {
+      const auto encoded_data = EncodeImage(image, path + temporary_file_name);
+      tinygltf::Image gltf_image;
+      gltf_image.mimeType = encoded_data.mime_type_;
+      gltf_image.bufferView = gltfModel.bufferViews.size();
+      gltf_image.as_is = true;
+      tinygltf::BufferView imageBufferView;
+      imageBufferView.buffer = gltfModel.buffers.size();
+      extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
+      gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
+      gltfModel.images.emplace_back(std::move(gltf_image));
     }
-    const auto encoded_data = EncodeImage(image, path + temporary_file_name);
-    tinygltf::Image gltf_image;
-    gltf_image.mimeType = encoded_data.mime_type_;
-    gltf_image.bufferView = gltfModel.bufferViews.size();
-    gltf_image.as_is = true;
-    tinygltf::BufferView imageBufferView;
-    imageBufferView.buffer = gltfModel.buffers.size();
-    extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
-    gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
-    gltfModel.images.emplace_back(std::move(gltf_image));
   };
 
   for (const geometry::TriangleMesh &mesh : meshes) {
@@ -1149,18 +1157,22 @@ inline tinygltf::Model WriteTexturedTriangleMeshToGLTFModel(const std::string &f
       gltf_primitive.attributes.insert(std::make_pair("TEXCOORD_0", static_cast<int>(model.accessors.size()) - 1));
       gltf_primitive.material = tex_idx;
 
-      auto encoded_image = EncodeImage(mesh.textures_[tex_idx], parent_dir + "texture" + std::to_string(tex_idx) + ".jpg");
       tinygltf::Image image;
-
-      // Save the bytes to the GLTF directly.
-      image.mimeType = encoded_image.mime_type_;
-      tinygltf::BufferView image_buffer_view;
-      image_buffer_view.name = "buffer-" + std::to_string(tex_idx) + "-bufferview-image-0";
-      image_buffer_view.buffer = model.buffers.size();
-      extendBuffer(encoded_image.data_, buffer, image_buffer_view.byteOffset, image_buffer_view.byteLength);
-      model.bufferViews.push_back(image_buffer_view);
-      image.bufferView = model.bufferViews.size() - 1;
-      image.as_is = true;
+      auto skipped_external_texture = TrySkippedExternalTexture(mesh.textures_[tex_idx], std::filesystem::path(parent_dir));
+      if (skipped_external_texture.has_value()) {
+        image = std::move(*skipped_external_texture);
+      } else {
+        // Save the bytes to the GLTF directly.
+        auto encoded_image = EncodeImage(mesh.textures_[tex_idx], parent_dir + "texture" + std::to_string(tex_idx) + ".jpg");
+        image.mimeType = encoded_image.mime_type_;
+        tinygltf::BufferView image_buffer_view;
+        image_buffer_view.name = "buffer-" + std::to_string(tex_idx) + "-bufferview-image-0";
+        image_buffer_view.buffer = model.buffers.size();
+        extendBuffer(encoded_image.data_, buffer, image_buffer_view.byteOffset, image_buffer_view.byteLength);
+        model.bufferViews.push_back(image_buffer_view);
+        image.bufferView = model.bufferViews.size() - 1;
+        image.as_is = true;
+      }
 
       tinygltf::Material gltf_mat;
       gltf_mat.pbrMetallicRoughness.metallicFactor = 0.0;
@@ -1386,7 +1398,7 @@ inline tinygltf::Model WriteTriangleMeshToGLTFModel(const std::string &filename,
   model.bufferViews[1].byteOffset = index_buffer.size();
 
   tinygltf::Buffer buffer;
-  buffer.uri = filename.substr(0, filename.find_last_of(".")) + ".bin";
+  buffer.uri = "geometry.bin";
   buffer.data.resize(index_buffer.size() + mesh_attribute_buffer.size());
   memcpy(buffer.data.data(), index_buffer.data(), index_buffer.size());
   memcpy(buffer.data.data() + index_buffer.size(), mesh_attribute_buffer.data(), mesh_attribute_buffer.size());
