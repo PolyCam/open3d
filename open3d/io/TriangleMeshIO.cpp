@@ -47,6 +47,9 @@ static const std::function<bool(const std::string &, geometry::TriangleMesh &, b
       case TextureLoadMode::pass_through: {
         return(ReadTriangleMeshFromGLTFWithTexturePassThrough);
       }
+      case TextureLoadMode::ignore_external_files: {
+        return(ReadTriangleMeshFromGLTFWithIgnoringExternalTextures);
+      }
     }
   } else if (ext == "obj") {
     return ReadTriangleMeshFromOBJ;

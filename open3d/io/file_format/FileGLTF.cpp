@@ -173,16 +173,34 @@ bool LoadImageData(tinygltf::Image *gltf_image, const int image_idx, std::string
 
 FileGeometry ReadFileGeometryTypeGLTF(const std::string &path) { return FileGeometry(CONTAINS_TRIANGLES | CONTAINS_POINTS); }
 
-bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress, bool texture_pass_through) {
+bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress,
+                                         TextureLoadMode texture_load_mode) {
+  std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
+  const bool bBinary(filename_ext == "glb");
+
   tinygltf::Model model;
   tinygltf::TinyGLTF loader;
   std::string warn;
   std::string err;
-  loader.SetImageLoader(texture_pass_through ? PassThroughImageData : LoadImageData, NULL);
+  switch(texture_load_mode) {
+    case TextureLoadMode::normal: {
+      loader.SetImageLoader(LoadImageData, NULL);
+      break;
+    }
+    case TextureLoadMode::pass_through: {
+      loader.SetImageLoader(PassThroughImageData, NULL);
+      break;
+    }
+    case TextureLoadMode::ignore_external_files: {
+      loader.SetSkipGltfExternalImageFiles(true);
+      //! @note If using external image files, this callback will never be called, so this only resorts to pass through if something isn't right.
+      loader.SetImageLoader(PassThroughImageData, NULL);
+      break;
+    }
+  }
 
-  std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   bool ret;
-  if (filename_ext == "glb") {
+  if (bBinary) {
     ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename.c_str());
   } else {
     ret = loader.LoadASCIIFromFile(&model, &err, &warn, filename.c_str());
@@ -448,11 +466,15 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 }
 
 bool ReadTriangleMeshFromGLTF(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
-  return ReadTriangleMeshFromGLTFWithOptions(filename, mesh, print_progress, false);
+  return ReadTriangleMeshFromGLTFWithOptions(filename, mesh, print_progress, TextureLoadMode::normal);
 }
 
 bool ReadTriangleMeshFromGLTFWithTexturePassThrough(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
-  return ReadTriangleMeshFromGLTFWithOptions(filename, mesh, print_progress, true);
+  return ReadTriangleMeshFromGLTFWithOptions(filename, mesh, print_progress, TextureLoadMode::pass_through);
+}
+
+bool ReadTriangleMeshFromGLTFWithIgnoringExternalTextures(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
+  return ReadTriangleMeshFromGLTFWithOptions(filename, mesh, print_progress, TextureLoadMode::ignore_external_files);
 }
 
 template <typename T>
