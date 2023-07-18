@@ -75,18 +75,8 @@ bool ReadImage(const std::string &filename, geometry::Image &image) {
 }
 
 bool WriteImage(const std::string &filename, const geometry::Image &image, int quality /* = 90*/) {
-  std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
-  if (filename_ext.empty()) {
-    utility::LogWarning("Write geometry::Image failed: unknown file extension.");
-    return false;
-  }
-  auto map_itr = file_extension_to_image_write_function.find(filename_ext);
-  if (map_itr == file_extension_to_image_write_function.end()) {
-    utility::LogWarning("Write geometry::Image failed: unknown file extension.");
-    return false;
-  }
   if (image.pass_through_.has_value()) {
-    std::visit(
+    return(std::visit(
         [&](const auto &pass_through) {
           using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
@@ -94,7 +84,7 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             if (!file_out.is_open()) {
               return false;
             }
-            file_out.write(reinterpret_cast<const char *>(pass_through.data()), pass_through.size());
+            file_out.write(reinterpret_cast<const char *>(pass_through.data_.data()), pass_through.data_.size());
             file_out.close();
             return true;
           } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
@@ -114,8 +104,18 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             return true;
           }
         },
-        *image.pass_through_)
+        *image.pass_through_));
   } else {
+    std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
+    if (filename_ext.empty()) {
+      utility::LogWarning("Write geometry::Image failed: unknown file extension.");
+      return false;
+    }
+    auto map_itr = file_extension_to_image_write_function.find(filename_ext);
+    if (map_itr == file_extension_to_image_write_function.end()) {
+      utility::LogWarning("Write geometry::Image failed: unknown file extension.");
+      return false;
+    }
     return map_itr->second(filename, image, quality);
   }
 }
