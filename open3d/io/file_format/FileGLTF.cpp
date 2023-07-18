@@ -73,8 +73,8 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
           using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
             return (geometry::Image::EncodedData{pass_through.data_, pass_through.mime_type_});
-          } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
-            return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through), utility::filesystem::GetMimeType(pass_through)});
+          } else if constexpr (std::is_same<PassThroughType, std::filesystem::path>::value) {
+            return (geometry::Image::EncodedData{ReadFileIntoBuffer(pass_through.string()), utility::filesystem::GetMimeType(pass_through.string())});
           }
         },
         *image.pass_through_));
@@ -91,8 +91,7 @@ static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLo
   geometry::Image open3d_image;
   if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && !tinygltf::IsDataURI(tinygltf_image.uri) &&
       tinygltf_image.image.empty()) {
-    const auto absolute_path = std::filesystem::canonical(parent_directory / std::filesystem::path(tinygltf_image.uri));
-    open3d_image.pass_through_ = geometry::Image::AbsolutePath(absolute_path.string());
+    open3d_image.pass_through_ = std::filesystem::canonical(parent_directory / std::filesystem::path(tinygltf_image.uri));
   } else if (tinygltf_image.as_is) {
     open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
     // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
@@ -804,7 +803,7 @@ static void InitializeGltfMaterial(tinygltf::Material &material, const geometry:
 
 static std::optional<tinygltf::Image> TrySkippedExternalTexture(const geometry::Image &image, const std::filesystem::path &parent_directory) {
   if (image.pass_through_.has_value()) {
-    const auto *absolute_path = std::get_if<geometry::Image::AbsolutePath>(&*image.pass_through_);
+    const auto *absolute_path = std::get_if<std::filesystem::path>(&*image.pass_through_);
     if (absolute_path != nullptr) {
       const auto relative_path = std::filesystem::relative(*absolute_path, parent_directory);
       tinygltf::Image gltf_image;

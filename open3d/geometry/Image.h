@@ -32,6 +32,7 @@
 #include <variant>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include "open3d/geometry/Geometry2D.h"
 #include "open3d/utility/Console.h"
@@ -236,8 +237,7 @@ class Image : public Geometry2D {
     /// The mime type of the encoded data.
     std::string mime_type_;
   };
-  using AbsolutePath = std::string;
-  using PassThrough = std::variant<EncodedData, AbsolutePath>;
+  using PassThrough = std::variant<EncodedData, std::filesystem::path>;
   std::optional<PassThrough> pass_through_;
 };
 

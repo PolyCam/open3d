@@ -88,8 +88,8 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             file_out.write(reinterpret_cast<const char *>(pass_through.data_.data()), pass_through.data_.size());
             file_out.close();
             return true;
-          } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
-            if(std::filesystem::path(pass_through) == std::filesystem::path(filename)) {
+          } else if constexpr (std::is_same<PassThroughType, std::filesystem::path>::value) {
+            if(pass_through == std::filesystem::path(filename)) {
               return true;
             }
             return std::filesystem::copy_file(pass_through, filename);
