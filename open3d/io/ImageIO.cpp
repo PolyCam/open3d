@@ -74,13 +74,6 @@ bool ReadImage(const std::string &filename, geometry::Image &image) {
   return map_itr->second(filename, image);
 }
 
-static bool WriteEncodedImageData(const std::string &filename, const geometry::Image::EncodedData &image) {
-  std::ofstream file_out(filename, std::ios::out | std::ios::binary);
-  file_out.write(reinterpret_cast<const char *>(image.data_.data()), image.data_.size());
-  file_out.close();
-  return true;
-}
-
 bool WriteImage(const std::string &filename, const geometry::Image &image, int quality /* = 90*/) {
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   if (filename_ext.empty()) {
@@ -93,7 +86,29 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
     return false;
   }
   if (image.pass_through_.has_value()) {
-    return WriteEncodedImageData(filename, image.pass_through_.value());
+    std::visit(
+        [&](const auto &pass_through) {
+          using PassThroughType = std::decay<decltype(pass_through)>::type;
+          if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
+            std::ofstream file_out(filename, std::ios::out | std::ios::binary);
+            file_out.write(reinterpret_cast<const char *>(pass_through.data()), pass_through.size());
+            file_out.close();
+            return true;
+          } else if constexpr (std::is_same<PassThroughType, geometry::Image::AbsolutePath>::value) {
+            if(pass_through == filename) {
+              return true;
+            }
+            std::vector<char> buffer;
+            if(!utility::filesystem::FReadToBuffer(filename, buffer, nullptr)) {
+              return false;
+            }
+            std::ofstream file_out(filename, std::ios::out | std::ios::binary);
+            file_out.write(buffer.data(), pass_through.size());
+            file_out.close();
+            return true;
+          }
+        },
+        *image.pass_through_)
   } else {
     return map_itr->second(filename, image, quality);
   }
