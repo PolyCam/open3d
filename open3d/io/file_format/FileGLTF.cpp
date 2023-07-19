@@ -65,6 +65,12 @@ static std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
   return (buffer);
 }
 
+static void WriteFileFromBuffer(const std::string &path, const std::vector<uint8_t> &buffer) {
+  auto stream = std::ofstream(path, std::ios::out | std::ios::binary);
+  stream.write(reinterpret_cast<const std::ofstream::char_type *>(buffer.data()), buffer.size());
+  stream.close();
+}
+
 static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, const std::string &temporary_file_path,
                                                 const std::string temporary_file_mime_type = "image/jpeg") {
   if (image.pass_through_.has_value()) {
@@ -844,6 +850,9 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   tinygltf::Buffer gltfBuffer;
 
   const auto parent_directory = std::filesystem::path(fileName).parent_path();
+  const auto assets_relative_directory = std::filesystem::path("assets");
+  const auto assets_directory = parent_directory / assets_relative_directory;
+  auto created_assets_directory = false;
   auto add_image = [&](const geometry::Image &image, const std::string &temporary_file_name) {
     auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
     if (skipped_external_texture.has_value()) {
@@ -852,13 +861,40 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       const auto encoded_data = EncodeImage(image, path + temporary_file_name);
       tinygltf::Image gltf_image;
       gltf_image.mimeType = encoded_data.mime_type_;
-      gltf_image.bufferView = gltfModel.bufferViews.size();
-      gltf_image.as_is = true;
-      tinygltf::BufferView imageBufferView;
-      imageBufferView.buffer = gltfModel.buffers.size();
-      extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
-      gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
-      gltfModel.images.emplace_back(std::move(gltf_image));
+      if (bBinary) {
+        gltf_image.bufferView = gltfModel.bufferViews.size();
+        gltf_image.as_is = true;
+        tinygltf::BufferView imageBufferView;
+        imageBufferView.buffer = gltfModel.buffers.size();
+        extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
+        gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
+        gltfModel.images.emplace_back(std::move(gltf_image));
+      } else {
+        const auto texture_base_name = utility::filesystem::GetFileNameWithoutExtension(temporary_file_name);
+        auto texture_number = 0u;
+        auto texture_name = std::string();
+        while (true) {
+          texture_name = texture_base_name + '_' + std::to_string(texture_number);
+          if (std::none_of(gltfModel.images.begin(), gltfModel.images.end(),
+                           [&](const tinygltf::Image &candidate_image) { return (candidate_image.name == texture_name); })) {
+            break;
+          }
+          ++texture_number;
+        }
+        gltf_image.name = texture_name;
+        const auto relative_texture_file =
+            assets_relative_directory /
+            std::filesystem::path(texture_name + '.' + utility::filesystem::GetFileExtensionInLowerCase(temporary_file_name));
+        const auto texture_file = parent_directory / relative_texture_file;
+        gltf_image.uri = relative_texture_file.string();
+        if (!created_assets_directory) {
+          std::filesystem::create_directories(assets_directory);
+          created_assets_directory = true;
+        }
+        std::filesystem::remove(texture_file);
+        WriteFileFromBuffer(texture_file.string(), encoded_data.data_);
+        gltfModel.images.emplace_back(std::move(gltf_image));
+      }
     }
   };
 
