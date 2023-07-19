@@ -1000,7 +1000,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
 
   // setup GLTF
   tinygltf::TinyGLTF gltf;
-  const bool bEmbedImages(bBinary), bEmbedBuffers(bBinary), bPrettyPrint(false);
+  const bool bEmbedImages(bBinary), bEmbedBuffers(bBinary), bPrettyPrint(!bBinary);
   return gltf.WriteGltfSceneToFile(&gltfModel, fileName, bEmbedImages, bEmbedBuffers, bPrettyPrint, bBinary);
 }
 
