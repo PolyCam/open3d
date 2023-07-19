@@ -86,17 +86,22 @@ static geometry::Image::EncodedData EncodeImage(const geometry::Image &image, co
   }
 }
 
+static void PreparePassThroughImage(geometry::Image &image) {
+  // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
+  image.Prepare(1, 1, 3, 1);
+  image.data_ = std::vector<uint8_t>(3, uint8_t(0));
+}
+
 static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLoadMode texture_load_mode,
                                 const std::filesystem::path &parent_directory) {
   geometry::Image open3d_image;
   if (texture_load_mode == TextureLoadMode::ignore_external_files && !tinygltf_image.uri.empty() && !tinygltf::IsDataURI(tinygltf_image.uri) &&
       tinygltf_image.image.empty()) {
     open3d_image.pass_through_ = std::filesystem::canonical(parent_directory / std::filesystem::path(tinygltf_image.uri));
+    PreparePassThroughImage(open3d_image);
   } else if (tinygltf_image.as_is) {
     open3d_image.pass_through_ = geometry::Image::EncodedData{tinygltf_image.image, GetMimeType(tinygltf_image)};
-    // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
-    open3d_image.Prepare(1, 1, 3, 1);
-    open3d_image.data_ = std::vector<uint8_t>(3, uint8_t(0));
+    PreparePassThroughImage(open3d_image);
   } else {
     assert(tinygltf_image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
     open3d_image.Prepare(tinygltf_image.width, tinygltf_image.height, tinygltf_image.component, tinygltf_image.bits / 8);
