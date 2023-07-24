@@ -38,10 +38,19 @@ namespace {
 using namespace io;
 
 static const std::function<bool(const std::string &, geometry::TriangleMesh &, bool)> GetReadMeshFunction(const std::string ext,
-                                                                                                          bool tex_pass_through) {
+                                                                                                          TextureLoadMode texture_load_mode) {
   if (ext == "gltf" || ext == "glb") {
-    // Note CH: Texture pass through is only implemented for reading GLTF meshes
-    return tex_pass_through ? ReadTriangleMeshFromGLTFWithTexturePassThrough : ReadTriangleMeshFromGLTF;
+    switch(texture_load_mode) {
+      case TextureLoadMode::normal: {
+        return(ReadTriangleMeshFromGLTF);
+      }
+      case TextureLoadMode::pass_through: {
+        return(ReadTriangleMeshFromGLTFWithTexturePassThrough);
+      }
+      case TextureLoadMode::ignore_external_files: {
+        return(ReadTriangleMeshFromGLTFWithIgnoringExternalTextures);
+      }
+    }
   } else if (ext == "obj") {
     return ReadTriangleMeshFromOBJ;
   } else if (ext == "ply") {
@@ -73,7 +82,7 @@ std::shared_ptr<geometry::TriangleMesh> CreateMeshFromFile(const std::string &fi
 }
 
 bool ReadTriangleMesh(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress /* = false */,
-                      bool texture_pass_through_if_available /* = false */) {
+                      TextureLoadMode texture_load_mode) {
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   if (filename_ext.empty()) {
     utility::LogWarning(
@@ -81,7 +90,7 @@ bool ReadTriangleMesh(const std::string &filename, geometry::TriangleMesh &mesh,
         "extension.");
     return false;
   }
-  bool success = GetReadMeshFunction(filename_ext, texture_pass_through_if_available)(filename, mesh, print_progress);
+  bool success = GetReadMeshFunction(filename_ext, texture_load_mode)(filename, mesh, print_progress);
   utility::LogDebug("Read geometry::TriangleMesh: {:d} triangles and {:d} vertices.", (int)mesh.triangles_.size(), (int)mesh.vertices_.size());
   if (mesh.HasVertices() && !mesh.HasTriangles()) {
     utility::LogWarning(

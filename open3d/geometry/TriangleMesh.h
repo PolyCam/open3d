@@ -744,11 +744,11 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
-      double texture_idx = -1; // If this material should point to a texture, provide the idx
+      std::optional<unsigned int> texture_idx; // If this material should point to a texture, provide the idx
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
-                emissiveFactor == other.emissiveFactor);
+                emissiveFactor == other.emissiveFactor && texture_idx == other.texture_idx);
       }
 
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }

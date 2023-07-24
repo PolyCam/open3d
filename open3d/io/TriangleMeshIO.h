@@ -37,12 +37,19 @@ namespace io {
 /// Return an empty mesh if fail to read the file.
 std::shared_ptr<geometry::TriangleMesh> CreateMeshFromFile(const std::string &filename, bool print_progress = false);
 
+enum class TextureLoadMode {
+  normal,
+  pass_through, // Textures are not decoded on loading, nor encoded on writing. Only available with GLB and GLTF files.
+  ignore_external_files // External texture files are neither read or written on writing. Only available with GLTF files. Resorts to
+      // pass through on GLB files, embedded textures on GLTF files and is ignored on other formats.
+};
+
 /// The general entrance for reading a TriangleMesh from a file
 /// The function calls read functions based on the extension name of filename.
 /// \return return true if the read function is successful, false otherwise.
 /// @note texture pass through will be skipped on mesh formats that do not support it
 bool ReadTriangleMesh(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress = false,
-                      bool texture_pass_through_if_available = false);
+                      TextureLoadMode texture_load_mode = TextureLoadMode::normal);
 
 /// The general entrance for writing a TriangleMesh to a file
 /// The function calls write functions based on the extension name of filename.
@@ -77,6 +84,7 @@ bool WriteTriangleMeshToOFF(const std::string &filename, const geometry::Triangl
 
 bool ReadTriangleMeshFromGLTF(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress);
 bool ReadTriangleMeshFromGLTFWithTexturePassThrough(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress);
+bool ReadTriangleMeshFromGLTFWithIgnoringExternalTextures(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress);
 
 bool WriteTriangleMeshToGLTF(const std::string &filename, const geometry::TriangleMesh &mesh, bool write_ascii, bool compressed,
                              bool write_vertex_normals, bool write_vertex_colors, bool write_triangle_uvs, bool print_progress);
