@@ -884,7 +884,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         gltf_image.name = texture_name;
         const auto relative_texture_file =
             assets_relative_directory /
-            std::filesystem::path(texture_name + '.' + GetExtension(encoded_data.mime_type_));
+            std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
         const auto texture_file = parent_directory / relative_texture_file;
         gltf_image.uri = relative_texture_file.string();
         if (!created_assets_directory) {
