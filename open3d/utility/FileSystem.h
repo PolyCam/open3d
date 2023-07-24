@@ -35,6 +35,8 @@ namespace filesystem {
 
 std::string GetMimeType(const std::string &filename);
 
+std::string GetExtension(const std::string &mime_type);
+
 std::string GetFileExtensionInLowerCase(const std::string &filename);
 
 std::string GetFileNameWithoutExtension(const std::string &filename);

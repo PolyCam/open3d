@@ -75,6 +75,22 @@ std::string GetMimeType(const std::string &filename) {
   }
 }
 
+std::string GetExtension(const std::string &mime_type) {
+  if (mime_type == "image/jpeg") {
+    return ("jpg");
+  } else if (mime_type == "image/png") {
+    return ("png");
+  } else if (mime_type == "image/basis") {
+    return ("basis");
+  } else if (mime_type == "model/gltf+json") {
+    return ("gltf");
+  } else if (mime_type == "model/gltf-binary") {
+    return ("glb");
+  } else {
+    return ("");
+  }
+}
+
 std::string GetFileExtensionInLowerCase(const std::string &filename) {
   size_t dot_pos = filename.find_last_of(".");
   if (dot_pos >= filename.length())
