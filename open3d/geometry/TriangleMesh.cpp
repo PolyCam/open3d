@@ -128,11 +128,17 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
 
   // Added by polycam for case when there is a mixture of textures & materials in gltf
   if (HasTriangleUvIndices() || mesh.HasTriangleUvIndices()) {
-    triangles_uvs_idx_.resize(new_tri_num, -1);
+    triangles_uvs_idx_.resize(new_tri_num, Eigen::Vector3i(-1, -1, -1));
     if (mesh.HasTriangleUvIndices()) {
       assert(mesh.triangles_uvs_idx_.size() == add_tri_num);
       for (size_t i = 0; i < add_tri_num; i++) {
-        triangles_uvs_idx_[old_tri_num + i] = mesh.triangles_uvs_idx_[i] + add_triangles_uvs_idx_;
+        const auto &src_triangles_uvs_idx = mesh.triangles_uvs_idx_[i];
+        auto &dest_triangles_uvs_idx = triangles_uvs_idx_[old_tri_num + i];
+        for (auto vertex = 0u; vertex < 3u; ++vertex) {
+          if (src_triangles_uvs_idx[vertex] >= 0) {
+            dest_triangles_uvs_idx[vertex] = src_triangles_uvs_idx[vertex] + add_triangles_uvs_idx_;
+          }
+        }
       }
     }
   }
