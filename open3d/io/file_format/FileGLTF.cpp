@@ -386,7 +386,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 
         // read texture and material
         if (primitive.material >= 0) {
-          geometry::TriangleMesh::Material &material = mesh_temp.materials_[std::to_string(mesh.materials_.size())];
+          auto material = geometry::TriangleMesh::Material();
           const tinygltf::Material &gltf_material = model.materials[primitive.material];
           const auto &color = gltf_material.pbrMetallicRoughness.baseColorFactor;
           if (color.size() == 4u) {
@@ -443,6 +443,8 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
             }
           }
+
+          mesh_temp.materials_.push_back(std::move(material));
         }
 
         if (gltf_node.matrix.size() > 0) {
@@ -621,9 +623,7 @@ std::vector<geometry::TriangleMesh> ConvertMeshToOneMeshPerTexblob(const geometr
     if (!srcMesh.textures_names_.empty())
       meshes[i].textures_names_.emplace_back(srcMesh.textures_names_[i]);
     if (!srcMesh.materials_.empty()) {
-      auto it = srcMesh.materials_.begin();
-      std::advance(it, i);
-      meshes[i].materials_.emplace(*it);
+      meshes[i].materials_.push_back(srcMesh.materials_[i]);
     }
   }
   return meshes;
@@ -663,14 +663,13 @@ static geometry::TriangleMesh ConsolidateUntexturedMaterials(const geometry::Tri
   };
   new_materials.reserve(srcMesh.materials_.size());
   while (from_original_material_mapping.size() < srcMesh.materials_.size()) {
-    const auto material = srcMesh.materials_.find(std::to_string(from_original_material_mapping.size()));
-    assert(material != srcMesh.materials_.end());
-    auto existing_new_material = find_existing_new_material(material->second);
+    const auto &material = srcMesh.materials_.[from_original_material_mapping.size()];
+    auto existing_new_material = find_existing_new_material(material);
     if (existing_new_material.has_value()) {
       from_original_material_mapping.push_back(*existing_new_material);
     } else {
       from_original_material_mapping.push_back(new_materials.size());
-      new_materials.push_back(material->second);
+      new_materials.push_back(material);
     }
   }
 
@@ -680,10 +679,8 @@ static geometry::TriangleMesh ConsolidateUntexturedMaterials(const geometry::Tri
   }
 
   auto mesh = srcMesh;
-  mesh.materials_.clear();
-  for (auto new_material = 0u; new_material < new_materials.size(); ++new_material) {
-    mesh.materials_.insert(std::make_pair(std::to_string(new_material), new_materials[new_material]));
-  }
+  new_materials.shrink_to_fit();
+  mesh.materials_ = std::move(new_materials);
   for (auto &triangle_material_id : mesh.triangle_material_ids_) {
     assert(triangle_material_id < srcMesh.materials_.size());
     triangle_material_id = from_original_material_mapping[triangle_material_id];
@@ -784,10 +781,8 @@ static std::vector<geometry::TriangleMesh> ConvertMeshToOneMeshPerUntextureMater
     assert(mesh.triangle_material_ids_.size() == included_triangles);
 
     // Add the material and mesh.
-    const auto material_name = std::to_string(material_in_mesh);
-    const auto material = srcMesh.materials_.find(material_name);
-    assert(material != srcMesh.materials_.end());
-    mesh.materials_.insert(std::make_pair("0", material->second));
+    const auto &material = srcMesh.materials_[material_in_mesh];
+    mesh.materials_.push_back(material);
     meshes.push_back(std::move(mesh));
   }
   return (meshes);
@@ -797,7 +792,7 @@ static void InitializeGltfMaterial(tinygltf::Material &material, const geometry:
   material.pbrMetallicRoughness.metallicFactor = 0.0;
   material.pbrMetallicRoughness.roughnessFactor = 1.0;
   if (mesh.materials_.size() == 1u) {
-    const auto &open3d_material = mesh.materials_.begin()->second;
+    const auto &open3d_material = mesh.materials_.front();
     const auto &color = open3d_material.baseColor;
     if (color != geometry::TriangleMesh::Material::MaterialParameter()) {
       material.pbrMetallicRoughness.baseColorFactor = {color.f4[0], color.f4[1], color.f4[2], color.f4[3]};
@@ -991,7 +986,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       }
       assert(mesh.materials_.empty() || mesh.materials_.size() == 1);
       if (!mesh.materials_.empty()) {
-        const geometry::TriangleMesh::Material &material = mesh.materials_.begin()->second;
+        const geometry::TriangleMesh::Material &material = mesh.materials_.front();
         if (material.normalMap) {
           gltfMaterial.normalTexture.index = gltfModel.textures.size();
           // setup texture

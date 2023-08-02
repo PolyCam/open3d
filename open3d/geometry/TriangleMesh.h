@@ -754,9 +754,11 @@ class TriangleMesh : public MeshBase {
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }
     };
     GltfExtras gltfExtras;
+
+    std::optional<std::string> name;
   };
 
-  std::map<std::string, Material> materials_;
+  std::vector<Material> materials_;
 
   /// List of material ids.
   std::vector<int> triangle_material_ids_;
