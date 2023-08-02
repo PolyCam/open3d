@@ -103,9 +103,9 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     ComputeAdjacencyList();
   }
 
-  int add_triangle_material_ids_;
-  int add_triangles_uvs_idx_;
-  int add_triangle_material_texture_ids_;
+  int add_triangle_material_ids_ = (int)materials_.size();
+  int add_triangles_uvs_idx_ = triangle_uvs_.size();
+  int add_triangle_material_texture_ids_ = (int)materials_.size();
   size_t old_tex_num = textures_.size();
   if (has_textures) {
     size_t old_tri_uv_num = triangle_uvs_.size();
@@ -118,14 +118,6 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     for (size_t i = 0; i < mesh.textures_.size(); i++) {
       textures_[old_tex_num + i] = mesh.textures_[i];
     }
-
-    add_triangle_material_ids_ = (int)old_tex_num;
-    add_triangles_uvs_idx_ = (int)old_tri_uv_num;
-    add_triangle_material_texture_ids_ = (int)materials_.size();
-  } else {
-    add_triangle_material_ids_ = (int)materials_.size();
-    add_triangles_uvs_idx_ = 0;
-    add_triangle_material_texture_ids_ = (int)materials_.size();
   }
 
   size_t old_mat_id_num = triangle_material_ids_.size();
@@ -135,12 +127,16 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
   }
 
   // Added by polycam for case when there is a mixture of textures & materials in gltf
-  if (mesh.triangles_.size() == mesh.triangles_uvs_idx_.size()) {
-    triangles_uvs_idx_.resize(triangles_uvs_idx_.size() + mesh.triangles_uvs_idx_.size());
-    for (size_t i = 0; i < mesh.triangles_uvs_idx_.size(); i++) {
-      triangles_uvs_idx_[old_tri_num + i] = mesh.triangles_uvs_idx_[i].array() + add_triangles_uvs_idx_;
+  if (HasTriangleUvIndices() || mesh.HasTriangleUvIndices()) {
+    triangles_uvs_idx_.resize(new_tri_num, -1);
+    if (mesh.HasTriangleUvIndices()) {
+      assert(mesh.triangles_uvs_idx_.size() == add_tri_num);
+      for (size_t i = 0; i < add_tri_num; i++) {
+        triangles_uvs_idx_[old_tri_num + i] = mesh.triangles_uvs_idx_[i] + add_triangles_uvs_idx_;
+      }
     }
   }
+
   if (true) {
     triangle_material_texture_ids_.resize(triangle_material_texture_ids_.size() + mesh.triangle_material_texture_ids_.size());
     for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); i++) {

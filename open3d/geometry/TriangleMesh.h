@@ -97,6 +97,10 @@ class TriangleMesh : public MeshBase {
     return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
   }
 
+  bool HasTriangleUvIndices() const {
+    return(!triangles_uvs_idx_.empty());
+  }
+
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
     bool is_all_texture_valid = std::accumulate(textures_.begin(), textures_.end(), true, [](bool a, const Image &b) { return a && !b.IsEmpty(); });
