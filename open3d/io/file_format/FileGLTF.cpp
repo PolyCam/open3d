@@ -663,7 +663,7 @@ static geometry::TriangleMesh ConsolidateUntexturedMaterials(const geometry::Tri
   };
   new_materials.reserve(srcMesh.materials_.size());
   while (from_original_material_mapping.size() < srcMesh.materials_.size()) {
-    const auto &material = srcMesh.materials_.[from_original_material_mapping.size()];
+    const auto &material = srcMesh.materials_[from_original_material_mapping.size()];
     auto existing_new_material = find_existing_new_material(material);
     if (existing_new_material.has_value()) {
       from_original_material_mapping.push_back(*existing_new_material);

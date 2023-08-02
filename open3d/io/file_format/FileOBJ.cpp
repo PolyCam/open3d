@@ -396,9 +396,9 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     for (auto material_index = 0u ; material_index < mesh.materials_.size() ; ++material_index) {
       const auto &material = mesh.materials_[material_index];
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
+      std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string)"-1");
       const auto &mtl_name = material_names[material_index];
       if (!texture_idx.has_value()) { // Solid color - not a texture
-        std::string tex_name = object_name_prefix + std::to_string(*texture_idx);
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
