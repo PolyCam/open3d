@@ -405,8 +405,8 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+              material.gltfExtras.texture_idx = mesh_temp.textures_.size();
               mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-              material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
                 const Eigen::Vector3i &face = mesh_temp.triangles_[i];
@@ -878,8 +878,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         }
         gltf_image.name = texture_name;
         const auto relative_texture_file =
-            assets_relative_directory /
-            std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
+            assets_relative_directory / std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
         const auto texture_file = parent_directory / relative_texture_file;
         gltf_image.uri = relative_texture_file.string();
         if (!created_assets_directory) {
