@@ -1587,5 +1587,19 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
   return weights;
 }
 
+bool TriangleMesh::Material::IsTextured() const {
+  return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
+          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value());
+}
+
+bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {
+  for (auto index = 0u; index < 4u; ++index) {
+    if (f4[index] != other.f4[index]) {
+      return (f4[index] < other.f4[index]);
+    }
+  }
+  return (false);
+}
+
 }  // namespace geometry
 }  // namespace open3d

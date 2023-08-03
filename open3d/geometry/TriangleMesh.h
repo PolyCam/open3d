@@ -97,9 +97,7 @@ class TriangleMesh : public MeshBase {
     return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
   }
 
-  bool HasTriangleUvIndices() const {
-    return(!triangles_uvs_idx_.empty());
-  }
+  bool HasTriangleUvIndices() const { return (!triangles_uvs_idx_.empty()); }
 
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
@@ -668,6 +666,8 @@ class TriangleMesh : public MeshBase {
   std::vector<Eigen::Vector3i> triangles_uvs_idx_;
 
   struct Material {
+    bool IsTextured() const;
+
     struct MaterialParameter {
       float f4[4] = {0};
 
@@ -712,6 +712,8 @@ class TriangleMesh : public MeshBase {
 
       bool operator!=(const MaterialParameter &other) const { return (!(*this == other)); }
 
+      bool operator<(const MaterialParameter &other) const;
+
       static MaterialParameter CreateRGB(const float r, const float g, const float b) { return {r, g, b, 1.f}; }
 
       float r() const { return f4[0]; }
@@ -739,7 +741,6 @@ class TriangleMesh : public MeshBase {
     std::shared_ptr<Image> anisotropy;
 
     std::unordered_map<std::string, MaterialParameter> floatParameters;
-    std::unordered_map<std::string, Image> additionalMaps;
 
     // Additional properties added by polycam to more accurately model a gltf/glb material
     // as neccessary for properly round tripping materials for roomplan captures.
@@ -748,7 +749,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
-      std::optional<unsigned int> texture_idx; // If this material should point to a texture, provide the idx
+      std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
