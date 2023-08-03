@@ -764,6 +764,9 @@ class TriangleMesh : public MeshBase {
     bool operator==(const Material &other) const;
     bool operator!=(const Material &other) const { return (!(*this == other)); }
     bool operator<(const Material &other) const;
+
+    bool IsEqualIgnoringName(const Material &other) const;
+    bool IsBeforeIgnoringName(const Material &other) const;
   };
 
   std::vector<Material> materials_;

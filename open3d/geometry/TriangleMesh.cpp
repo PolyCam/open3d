@@ -1628,8 +1628,17 @@ bool TriangleMesh::Material::GltfExtras::operator<(const GltfExtras &other) cons
   return (false);
 }
 
-bool TriangleMesh::Material::operator==(const Material &other) const {
-  return (baseColor == other.baseColor && gltfExtras == other.gltfExtras && name == other.name && baseMetallic == other.baseMetallic &&
+bool TriangleMesh::Material::operator==(const Material &other) const { return (name == other.name IsBeforeIgnoringName(other)); }
+
+bool TriangleMesh::Material::operator<(const Material &other) const {
+  if (name != other.name) {
+    return (name < other.name);
+  }
+  return (IsBeforeIgnoringName(other));
+}
+
+bool TriangleMesh::IsEqualIgnoringName(const Material &other) const {
+  return (baseColor == other.baseColor && gltfExtras == other.gltfExtras && baseMetallic == other.baseMetallic &&
           baseRoughness == other.baseRoughness && baseReflectance == other.baseReflectance && baseClearCoat == other.baseClearCoat &&
           baseClearCoatRoughness == other.baseClearCoatRoughness && baseAnisotropy == other.baseAnisotropy && albedo.get() == other.albedo.get() &&
           normalMap.get() == other.normalMap.get() && ambientOcclusion.get() == other.ambientOcclusion.get() &&
@@ -1638,12 +1647,9 @@ bool TriangleMesh::Material::operator==(const Material &other) const {
           anisotropy.get() == other.anisotropy.get());
 }
 
-bool TriangleMesh::Material::operator==(const Material &other) const {
+bool TriangleMesh::IsBeforeIgnoringName(const Material &other) const {
   if (baseColor != other.baseColor) {
     return (baseColor < other.baseColor);
-  }
-  if (name != other.name) {
-    return (name < other.name);
   }
   if (gltfExtras != other.gltfExtras) {
     return (gltfExtras < other.gltfExtras);
