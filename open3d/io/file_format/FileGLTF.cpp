@@ -639,7 +639,6 @@ static bool CompareUntextureMaterials(const geometry::TriangleMesh::Material &fi
   assert(!(bool)first.clearCoat && !(bool)second.clearCoat);                    // Textures unsupported.
   assert(!(bool)first.clearCoatRoughness && !(bool)second.clearCoatRoughness);  // Textures unsupported.
   assert(!(bool)first.anisotropy && !(bool)second.anisotropy);                  // Textures unsupported.
-  assert(first.additionalMaps.empty() && second.additionalMaps.empty());        // Textures unsupported.
 
   return (first.baseColor == second.baseColor && first.baseMetallic == second.baseMetallic && first.baseRoughness == second.baseRoughness &&
           first.baseReflectance == second.baseReflectance && first.baseClearCoat == second.baseClearCoat &&
