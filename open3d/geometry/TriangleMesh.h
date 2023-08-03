@@ -740,8 +740,6 @@ class TriangleMesh : public MeshBase {
     std::shared_ptr<Image> clearCoatRoughness;
     std::shared_ptr<Image> anisotropy;
 
-    std::unordered_map<std::string, MaterialParameter> floatParameters;
-
     // Additional properties added by polycam to more accurately model a gltf/glb material
     // as neccessary for properly round tripping materials for roomplan captures.
     struct GltfExtras {
@@ -757,10 +755,15 @@ class TriangleMesh : public MeshBase {
       }
 
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }
+      bool operator<(const GltfExtras &other) const;
     };
     GltfExtras gltfExtras;
 
     std::optional<std::string> name;
+
+    bool operator==(const Material &other) const;
+    bool operator!=(const Material &other) const { return (!(*this == other)); }
+    bool operator<(const Material &other) const;
   };
 
   std::vector<Material> materials_;

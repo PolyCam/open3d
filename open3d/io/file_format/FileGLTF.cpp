@@ -643,7 +643,7 @@ static bool CompareUntextureMaterials(const geometry::TriangleMesh::Material &fi
   return (first.baseColor == second.baseColor && first.baseMetallic == second.baseMetallic && first.baseRoughness == second.baseRoughness &&
           first.baseReflectance == second.baseReflectance && first.baseClearCoat == second.baseClearCoat &&
           first.baseClearCoatRoughness == second.baseClearCoatRoughness && first.baseAnisotropy == second.baseAnisotropy &&
-          first.floatParameters == second.floatParameters && first.gltfExtras == second.gltfExtras);
+          first.gltfExtras == second.gltfExtras);
 }
 
 static geometry::TriangleMesh ConsolidateUntexturedMaterials(const geometry::TriangleMesh &srcMesh) {
