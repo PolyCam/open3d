@@ -156,10 +156,10 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
 }
 
 void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, const DuplicateConsolidation &texture_coordinates_consolidation) {
-  ConsolidateTextureCoordinateIndices(mesh, &texture_coordinates_consolidation);
+  ConsolidateTextureCoordinateIndicesWithVertices(mesh, &texture_coordinates_consolidation);
 }
 
-void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh) { ConsolidateTextureCoordinateIndices(mesh, nullptr); }
+void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh) { ConsolidateTextureCoordinateIndicesWithVertices(mesh, nullptr); }
 
 static bool CompareMaterialsForOrder(const TriangleMesh::Material &first, const TriangleMesh::Material &second) {
   return (first.IsBeforeIgnoringName(second));
