@@ -819,7 +819,7 @@ static std::optional<tinygltf::Image> TrySkippedExternalTexture(const geometry::
       const auto relative_path = std::filesystem::relative(*absolute_path, parent_directory);
       tinygltf::Image gltf_image;
       gltf_image.uri = relative_path.string();
-      gltf_image.mimeType = utility::filesystem::GetMimeType(*absolute_path);
+      gltf_image.mimeType = utility::filesystem::GetMimeType(absolute_path->string());
       gltf_image.name = absolute_path->stem().string();
       return (gltf_image);
     }
