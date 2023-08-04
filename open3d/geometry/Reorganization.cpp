@@ -96,6 +96,71 @@ void ConsolidateTextureCoordinates(TriangleMesh &mesh, const DuplicateConsolidat
   }
 }
 
+struct TexturedVertex {
+  unsigned int vertex_coordinates_;   // Index into TriangleMesh::vertices_.
+  unsigned int texture_coordinates_;  // Index into TriangleMesh::triangle_uvs_.
+};
+
+static bool operator==(const TexturedVertex &first, const TexturedVertex &second) {
+  return (first.vertex_coordinates_ == second.vertex_coordinates_ && first.texture_coordinates_ == second.texture_coordinates_);
+}
+
+static const auto unsigned_int_hasher = std::hash<unsigned int>();
+
+static std::size_t HashTexturedVertex(const TexturedVertex &indices) {
+  return (unsigned_int_hasher(indices.vertex_coordinates_) + unsigned_int_hasher(indices.texture_coordinates_));
+}
+
+static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, const DuplicateConsolidation *texture_coordinates_consolidation) {
+  assert(mesh.triangles_uvs_idx_.size() == mesh.triangles_.size());
+  assert((texture_coordinates_consolidation != nullptr)
+             ? (texture_coordinates_consolidation->original_to_consolidated_indices_.size() == mesh.triangle_uvs_.size())
+             : true);
+  assert((texture_coordinates_consolidation != nullptr)
+             ? (texture_coordinates_consolidation->consolidated_to_original_indices_.size() < mesh.triangle_uvs_.size())
+             : true);
+  auto vertices = std::vector<Eigen::Vector3d>();
+  vertices.reserve(mesh.triangles_.size() * 3u);  // Worst case scenario.
+  auto texture_coordinates = std::vector<Eigen::Vector2d>();
+  texture_coordinates.reserve(mesh.triangles_.size() * 3u);  // Worst case scenario.
+  auto duplication_eliminator =
+      std::unordered_map<TexturedVertex, unsigned int /* index into vertices and texture_coordinates */, decltype(&HashTexturedVertex)>(
+          mesh.triangles_.size() * 3u, &HashTexturedVertex);
+  for (auto triangle_index = 0u; triangle_index < mesh.triangles_.size(); ++triangle_index) {
+    auto &triangle = mesh.triangles_[triangle_index];
+    auto &triangle_uv_indices = mesh.triangles_uvs_idx_[triangle_index];
+    for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
+      auto &vertex = triangle[vertex_in_triangle];
+      assert(vertex >= 0);
+      assert(vertex < mesh.vertices_.size());
+      auto &vertex_uv_indices = triangle_uv_indices[vertex_in_triangle];
+      assert(vertex_uv_indices >= 0);
+      assert(vertex_uv_indices < mesh.triangle_uvs_.size());
+      const auto insertion_result = duplication_eliminator.insert(std::make_pair(
+          TexturedVertex{(unsigned int)vertex, (texture_coordinates_consolidation != nullptr)
+                                                   ? texture_coordinates_consolidation->original_to_consolidated_indices_[vertex_uv_indices]
+                                                   : vertex_uv_indices},
+          (unsigned int)vertices.size()));
+      if (insertion_result.second) {  // If a new vertex, uv index pair was found.
+        vertices.push_back(mesh.vertices_[vertex]);
+        texture_coordinates.push_back(mesh.triangle_uvs_[vertex_uv_indices]);
+      }
+      vertex = insertion_result.first->second;
+      vertex_uv_indices = vertex;
+    }
+  }
+  vertices.shrink_to_fit();
+  mesh.vertices_ = std::move(vertices);
+  texture_coordinates.shrink_to_fit();
+  mesh.triangle_uvs_ = std::move(texture_coordinates);
+}
+
+void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, const DuplicateConsolidation &texture_coordinates_consolidation) {
+  ConsolidateTextureCoordinateIndices(mesh, &texture_coordinates_consolidation);
+}
+
+void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh) { ConsolidateTextureCoordinateIndices(mesh, nullptr); }
+
 static bool CompareMaterialsForOrder(const TriangleMesh::Material &first, const TriangleMesh::Material &second) {
   return (first.IsBeforeIgnoringName(second));
 }

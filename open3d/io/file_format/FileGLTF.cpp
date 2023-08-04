@@ -563,7 +563,8 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   for (auto &mesh : meshes) {
     assert(mesh.materials_.size() == 1u);
     if (mesh.materials_.front().IsTextured()) {
-      ConsolidateTextureCoordinates(mesh);
+      const auto texture_coordinates_consolidation = GetTextureCoordinatesConsolidation(mesh);
+      ConsolidateTextureCoordinateIndicesWithVertices(mesh, texture_coordinates_consolidation);
     }
   }
 
@@ -707,8 +708,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       // setup material
       gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
       gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
-      if (material.gltfExtras.texture_idx.has_value())
-      {
+      if (material.gltfExtras.texture_idx.has_value()) {
         assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
         // setup texture
         tinygltf::Texture texture;
