@@ -26,12 +26,12 @@
 
 #include <tiny_obj_loader.h>
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <numeric>
 #include <random>
 #include <vector>
-#include <algorithm>
 
 #include "open3d/io/FileFormatIO.h"
 #include "open3d/io/ImageIO.h"
@@ -297,8 +297,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // map faces with material ids
   std::map<int, std::vector<size_t>> material_id_faces_map;
   if (mesh.HasTriangleMaterialIds()) {
-    for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); ++i) {
-      int mi = mesh.triangle_material_texture_ids_[i];
+    for (size_t i = 0; i < mesh.triangle_material_ids_.size(); ++i) {
+      int mi = mesh.triangle_material_ids_[i];
       auto it = material_id_faces_map.find(mi);
       if (it == material_id_faces_map.end()) {
         material_id_faces_map[mi] = {i};
@@ -348,11 +348,11 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       const Eigen::Vector3i &triangle_uvs_idx = mesh.triangles_uvs_idx_[tidx];
       bool write_triangle_uv = triangle_uvs_idx(0) >= 0 && triangle_uvs_idx(1) >= 0 && triangle_uvs_idx(2) >= 0;
       if (write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(0) + 1, triangle(1) + 1,
-                  triangle_uvs_idx(1) + 1, triangle(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1, triangle(2) + 1);
+        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(0) + 1,
+                  triangle(1) + 1, triangle_uvs_idx(1) + 1, triangle(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1, triangle(2) + 1);
       } else if (!write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(1) + 1, triangle_uvs_idx(1) + 1, triangle(2) + 1,
-                  triangle_uvs_idx(2) + 1);
+        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(1) + 1,
+                  triangle_uvs_idx(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1);
       } else if (write_vertex_normals && !write_triangle_uv) {
         format_to(std::back_inserter(out), "f {}//{} {}//{} {}//{}\n", triangle(0) + 1, triangle(0) + 1, triangle(1) + 1, triangle(1) + 1,
                   triangle(2) + 1, triangle(2) + 1);
@@ -393,12 +393,12 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
-    for (auto material_index = 0u ; material_index < mesh.materials_.size() ; ++material_index) {
+    for (auto material_index = 0u; material_index < mesh.materials_.size(); ++material_index) {
       const auto &material = mesh.materials_[material_index];
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
-      std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string)"-1");
+      std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string) "-1");
       const auto &mtl_name = material_names[material_index];
-      if (!texture_idx.has_value()) { // Solid color - not a texture
+      if (!texture_idx.has_value()) {  // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
@@ -409,8 +409,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
           mtl_file << "Ks 0.000 0.000 0.000\n";
         mtl_file << "d " << material.baseColor.a() << "\n";
         mtl_file << "illum 1\n";
-        mtl_file << "Ns 1.000000\n"; // Spectral exponent
-      } else { // Texture
+        mtl_file << "Ns 1.000000\n";  // Spectral exponent
+      } else {                        // Texture
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
         mtl_file << "Kd 1.000 1.000 1.000\n";

@@ -773,8 +773,6 @@ class TriangleMesh : public MeshBase {
 
   /// List of material ids.
   std::vector<int> triangle_material_ids_;
-  /// List of material ids. If refers to a texture, material will point to the texture ID. (Added by polycam)
-  std::vector<int> triangle_material_texture_ids_;
   /// Textures of the image.
   std::vector<Image> textures_;
   /// Texture file names of the image (optional - if exist and are identical to the memory textures).

@@ -106,7 +106,6 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
 
   int add_triangle_material_ids_ = (int)materials_.size();
   int add_triangles_uvs_idx_ = triangle_uvs_.size();
-  int add_triangle_material_texture_ids_ = (int)materials_.size();
   size_t old_tex_num = textures_.size();
   if (has_textures) {
     size_t old_tri_uv_num = triangle_uvs_.size();
@@ -141,13 +140,6 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
           }
         }
       }
-    }
-  }
-
-  if (true) {
-    triangle_material_texture_ids_.resize(triangle_material_texture_ids_.size() + mesh.triangle_material_texture_ids_.size());
-    for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); i++) {
-      triangle_material_texture_ids_[old_tri_num + i] = mesh.triangle_material_texture_ids_[i] + add_triangle_material_texture_ids_;
     }
   }
 

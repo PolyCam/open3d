@@ -401,7 +401,6 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           material.gltfExtras.alphaMode = gltf_material.alphaMode;
           material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
           mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-          mesh_temp.triangle_material_texture_ids_.resize(mesh_temp.triangles_.size(), 0);
           if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
