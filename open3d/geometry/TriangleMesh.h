@@ -660,9 +660,9 @@ class TriangleMesh : public MeshBase {
   /// The set adjacency_list[i] contains the indices of adjacent vertices of
   /// vertex i.
   std::vector<std::unordered_set<int>> adjacency_list_;
-  /// List of uv coordinates per triangle.
+  /// List of uv coordinates (referenced by triangles_uvs_idx_).
   std::vector<Eigen::Vector2d> triangle_uvs_;
-  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx
+  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx (index into triangle_uvs_).
   std::vector<Eigen::Vector3i> triangles_uvs_idx_;
 
   struct Material {
@@ -747,7 +747,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
-      std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx
+      std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
@@ -771,7 +771,7 @@ class TriangleMesh : public MeshBase {
 
   std::vector<Material> materials_;
 
-  /// List of material ids.
+  /// List of material ids (indices into materials_, same size as triangles_)
   std::vector<int> triangle_material_ids_;
   /// Textures of the image.
   std::vector<Image> textures_;
