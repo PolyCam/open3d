@@ -474,21 +474,20 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           if (gltf_node.translation.size() > 0) {
             mesh_temp.Translate(Eigen::Vector3d(gltf_node.translation[0], gltf_node.translation[1], gltf_node.translation[2]));
           }
+          if (mesh_temp.materials_.empty()) {
+            mesh_temp.materials_.push_back(geometry::TriangleMesh::Material());
+          }
+          if (mesh_temp.triangle_material_ids_.empty()) {
+            mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
+          }
+          if (mesh_temp.textures_.empty()) {
+            mesh_temp.triangle_uvs_.clear();
+            mesh_temp.triangles_uvs_idx_.clear();
+          }
           mesh += mesh_temp;
         }
       }
     }
-  }
-
-  if (mesh.materials_.empty()) {
-    mesh.materials_.insert(std::make_pair("0", geometry::TriangleMesh::Material()));
-  }
-  if (mesh.triangle_material_ids_.empty()) {
-    mesh.triangle_material_ids_.resize(mesh.triangles_.size(), 0);
-  }
-  if (mesh.textures_.empty()) {
-    mesh.triangle_uvs_.clear();
-    mesh.triangles_uvs_idx_.clear();
   }
 
   return true;
