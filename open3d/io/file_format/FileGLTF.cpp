@@ -476,7 +476,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           }
           if (mesh_temp.materials_.empty()) {
             auto default_material = geometry::TriangleMesh::Material();
-            default_material.base_color = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+            default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
             mesh_temp.materials_.push_back(default_material);
           }
           if (mesh_temp.triangle_material_ids_.empty()) {
