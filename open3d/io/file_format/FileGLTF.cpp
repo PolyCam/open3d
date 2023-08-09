@@ -478,6 +478,17 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
     }
   }
 
+  if (mesh.materials_.empty()) {
+    mesh.materials_.insert(std::make_pair("0", geometry::TriangleMesh::Material()));
+  }
+  if (mesh.triangle_material_ids_.empty()) {
+    mesh.triangle_material_ids_.resize(mesh.triangles_.size(), 0);
+  }
+  if (mesh.textures_.empty()) {
+    mesh.triangle_uvs_.clear();
+    mesh.triangles_uvs_idx_.clear();
+  }
+
   return true;
 }
 
@@ -883,8 +894,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         }
         gltf_image.name = texture_name;
         const auto relative_texture_file =
-            assets_relative_directory /
-            std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
+            assets_relative_directory / std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
         const auto texture_file = parent_directory / relative_texture_file;
         gltf_image.uri = relative_texture_file.string();
         if (!created_assets_directory) {
