@@ -480,6 +480,17 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
     }
   }
 
+  if (mesh.materials_.empty()) {
+    mesh.materials_.insert(std::make_pair("0", geometry::TriangleMesh::Material()));
+  }
+  if (mesh.triangle_material_ids_.empty()) {
+    mesh.triangle_material_ids_.resize(mesh.triangles_.size(), 0);
+  }
+  if (mesh.textures_.empty()) {
+    mesh.triangle_uvs_.clear();
+    mesh.triangles_uvs_idx_.clear();
+  }
+
   return true;
 }
 
