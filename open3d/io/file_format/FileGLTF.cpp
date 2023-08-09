@@ -475,7 +475,9 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             mesh_temp.Translate(Eigen::Vector3d(gltf_node.translation[0], gltf_node.translation[1], gltf_node.translation[2]));
           }
           if (mesh_temp.materials_.empty()) {
-            mesh_temp.materials_.push_back(geometry::TriangleMesh::Material());
+            auto default_material = geometry::TriangleMesh::Material();
+            default_material.base_color = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+            mesh_temp.materials_.push_back(default_material);
           }
           if (mesh_temp.triangle_material_ids_.empty()) {
             mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
