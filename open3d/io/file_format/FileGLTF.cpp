@@ -117,6 +117,67 @@ static geometry::Image ToOpen3d(const tinygltf::Image &tinygltf_image, TextureLo
   return (open3d_image);
 }
 
+static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &model) {
+  std::vector<Eigen::Matrix4d> node_transforms(model.nodes.size(), Eigen::Matrix4d::Identity());
+  auto is_root = std::vector<bool>(model.nodes.size(), true);
+  for (const auto &node : model.nodes) {
+    for (const auto &child : node.children) {
+      is_root[child] = false;
+    }
+  }
+  auto stack = std::vector<size_t>();
+  for (auto i = 0; i < model.nodes.size(); ++i) {
+    if (is_root[i]) {
+      stack.push_back(i);
+    }
+  }
+  auto visited = std::vector<bool>(model.nodes.size(), false);
+  while (!stack.empty()) {
+    const auto node_idx = stack.back();
+    stack.pop_back();
+    if (visited[node_idx]) {
+      throw std::runtime_error("Cycle detected in glTF scene graph.");
+    }
+    visited[node_idx] = true;
+    const auto &node = model.nodes[node_idx];
+    if (!node.matrix.empty()) {
+      std::vector<double> matrix = node.matrix;
+      Eigen::Matrix4d transform = Eigen::Map<Eigen::Matrix4d>(&matrix[0], 4, 4);
+      node_transforms[node_idx] *= transform;
+    } else {
+      // The specification states that first the scale is
+      // applied to the vertices, then the rotation, and then the
+      // translation. Multipy the matrices in the reverse order.
+      if (node.translation.size() > 0) {
+        Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
+        transform.topRightCorner<3, 1>() = Eigen::Vector3d(node.translation[0], node.translation[1], node.translation[2]);
+        node_transforms[node_idx] *= transform;
+      }
+      if (node.rotation.size() > 0) {
+        Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
+        // glTF represents a quaternion as qx, qy, qz, qw, while
+        // Eigen::Quaterniond orders the parameters as qw, qx,
+        // qy, qz.
+        transform.topLeftCorner<3, 3>() =
+            Eigen::Quaterniond(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]).toRotationMatrix();
+        node_transforms[node_idx] *= transform;
+      }
+      if (node.scale.size() > 0) {
+        Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
+        transform(0, 0) = node.scale[0];
+        transform(1, 1) = node.scale[1];
+        transform(2, 2) = node.scale[2];
+        node_transforms[node_idx] *= transform;
+      }
+    }
+    for (const auto &child : node.children) {
+      node_transforms[child] = node_transforms[node_idx];
+      stack.push_back(child);
+    }
+  }
+  return (node_transforms);
+}
+
 // Adapts an array of bytes to an array of T. Will advance of byte_stride each
 // elements.
 template <typename T>
@@ -235,6 +296,8 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
         "The file contains more than one mesh. All meshes will be "
         "loaded as a single mesh.");
   }
+
+  const auto node_transforms = GetNodeTransforms(model);
 
   mesh.Clear();
   geometry::TriangleMesh mesh_temp;
@@ -457,50 +520,26 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           mesh_temp.materials_.push_back(std::move(material));
         }
 
-        if (gltf_node.matrix.size() > 0) {
-          std::vector<double> matrix = gltf_node.matrix;
-          Eigen::Matrix4d transform = Eigen::Map<Eigen::Matrix4d>(&matrix[0], 4, 4);
-          mesh_temp.Transform(transform);
-        } else {
-          // The specification states that first the scale is
-          // applied to the vertices, then the rotation, and then the
-          // translation.
-          if (gltf_node.scale.size() > 0) {
-            Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-            transform(0, 0) = gltf_node.scale[0];
-            transform(1, 1) = gltf_node.scale[1];
-            transform(2, 2) = gltf_node.scale[2];
-            mesh_temp.Transform(transform);
-          }
-          if (gltf_node.rotation.size() > 0) {
-            Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-            // glTF represents a quaternion as qx, qy, qz, qw, while
-            // Eigen::Quaterniond orders the parameters as qw, qx,
-            // qy, qz.
-            transform.topLeftCorner<3, 3>() =
-                Eigen::Quaterniond(gltf_node.rotation[3], gltf_node.rotation[0], gltf_node.rotation[1], gltf_node.rotation[2]).toRotationMatrix();
-            mesh_temp.Transform(transform);
-          }
-          if (gltf_node.translation.size() > 0) {
-            mesh_temp.Translate(Eigen::Vector3d(gltf_node.translation[0], gltf_node.translation[1], gltf_node.translation[2]));
-          }
-
-          // Handle missing or excess materials or attributes.
-          if (mesh_temp.materials_.empty()) {
-            auto default_material = geometry::TriangleMesh::Material();
-            default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
-            mesh_temp.materials_.push_back(default_material);
-          }
-          if (mesh_temp.triangle_material_ids_.empty()) {
-            mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-          }
-          if (mesh_temp.textures_.empty()) {
-            mesh_temp.triangle_uvs_.clear();
-            mesh_temp.triangles_uvs_idx_.clear();
-          }
-
-          mesh += mesh_temp;
+        const auto node_idx = &gltf_node - &model.nodes[0];
+        if (node_transforms[node_idx] != Eigen::Matrix4d::Identity()) {
+          mesh_temp.Transform(node_transforms[node_idx]);
         }
+
+        // Handle missing or excess materials or attributes.
+        if (mesh_temp.materials_.empty()) {
+          auto default_material = geometry::TriangleMesh::Material();
+          default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+          mesh_temp.materials_.push_back(default_material);
+        }
+        if (mesh_temp.triangle_material_ids_.empty()) {
+          mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
+        }
+        if (mesh_temp.textures_.empty()) {
+          mesh_temp.triangle_uvs_.clear();
+          mesh_temp.triangles_uvs_idx_.clear();
+        }
+
+        mesh += mesh_temp;
       }
     }
   }
