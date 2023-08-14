@@ -31,6 +31,7 @@
 #include <cassert>
 #include <cmath>
 #include <filesystem>
+#include <iostream>
 #include <numeric>
 #include <vector>
 
@@ -191,6 +192,7 @@ FileGeometry ReadFileGeometryTypeGLTF(const std::string &path) { return FileGeom
 
 bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress,
                                          TextureLoadMode texture_load_mode) {
+  std::cout << "open3d::io::ReadTriangleMeshFromGLTFWithOptions()" << std::endl;
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   const bool bBinary(filename_ext == "glb");
   const auto parent_directory = std::filesystem::path(filename).parent_path();
@@ -566,6 +568,8 @@ static std::optional<tinygltf::Image> TrySkippedExternalTexture(const geometry::
 
 // export the mesh as a GLTF file
 bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_mesh) {
+  std::cout << "open3d::io::SaveMeshGLTF()" << std::endl;
+
   const std::string path = utility::filesystem::GetFileParentDirectory(fileName);
   if (!path.empty())
     utility::filesystem::MakeDirectoryHierarchy(path);
