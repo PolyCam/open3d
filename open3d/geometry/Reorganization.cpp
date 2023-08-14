@@ -117,7 +117,7 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
              ? (texture_coordinates_consolidation->original_to_consolidated_indices_.size() == mesh.triangle_uvs_.size())
              : true);
   assert((texture_coordinates_consolidation != nullptr)
-             ? (texture_coordinates_consolidation->consolidated_to_original_indices_.size() < mesh.triangle_uvs_.size())
+             ? (texture_coordinates_consolidation->consolidated_to_original_indices_.size() <= mesh.triangle_uvs_.size())
              : true);
   auto vertices = std::vector<Eigen::Vector3d>();
   vertices.reserve(mesh.triangles_.size() * 3u);  // Worst case scenario.
@@ -292,6 +292,9 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
   assert(materials_triangle_usage.size() == mesh_count);
   for (auto mesh_index = 0u; mesh_index < mesh_count; ++mesh_index) {
     const auto &material_triangle_usage = materials_triangle_usage[mesh_index];
+    if (material_triangle_usage.empty()) {
+      continue;
+    }
     const auto &material =
         mesh.materials_[has_material_consolidation ? material_consolidation->consolidated_to_original_indices_[mesh_index] : mesh_index];
     const auto vertices_in_use_consolidation = ConsolidateOnlyInUseVertices(mesh.triangles_, material_triangle_usage);
@@ -323,7 +326,7 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
     }
 
     // Add the texture coordinates, if needed.
-    if (material.IsTextured()) {
+    if (material.IsTextured() && mesh.HasTriangleUvIndices()) {
       const auto texture_coordinates_in_use_consolidation = ConsolidateOnlyInUseVertices(mesh.triangles_uvs_idx_, material_triangle_usage);
       single_material_mesh.triangles_uvs_idx_ =
           GetSingleMaterialMeshVertexIndices(mesh.triangles_uvs_idx_, texture_coordinates_in_use_consolidation, material_triangle_usage);

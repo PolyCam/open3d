@@ -83,7 +83,7 @@ class TriangleMesh : public MeshBase {
   bool HasAdjacencyList() const { return vertices_.size() > 0 && adjacency_list_.size() == vertices_.size(); }
 
   bool HasTriangleUvs() const {
-    return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
+    return HasTriangles() && !triangle_uvs_.empty();
   }
 
   bool HasTriangleUvs_Any() const {
@@ -94,7 +94,7 @@ class TriangleMesh : public MeshBase {
       valid_uv = true;
       break;
     }
-    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
+    return HasTriangles() && valid_uv && !triangle_uvs_.empty();
   }
 
   bool HasTriangleUvIndices() const { return (!triangles_uvs_idx_.empty()); }

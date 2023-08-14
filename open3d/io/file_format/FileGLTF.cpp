@@ -401,8 +401,18 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           material.gltfExtras.alphaMode = gltf_material.alphaMode;
           material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
           mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
+          auto texture_idx = std::optional<size_t>();
           if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-            const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
+            texture_idx = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
+          } else if (const auto it = gltf_material.extensions.find("KHR_materials_pbrSpecularGlossiness"); it != gltf_material.extensions.end()) {
+            const auto &specularGlossiness = it->second;
+            // Treat the diffuse texture as the base color texture.
+            if (specularGlossiness.Has("diffuseTexture")) {
+              texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
+            }
+          }
+          if (texture_idx.has_value()) {
+            const tinygltf::Texture &gltf_texture = model.textures[texture_idx.value()];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               material.gltfExtras.texture_idx = mesh_temp.textures_.size();
@@ -576,7 +586,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   auto meshes = SeparateMeshByMaterial(_mesh, material_consolidation);
   for (auto &mesh : meshes) {
     assert(mesh.materials_.size() == 1u);
-    if (mesh.materials_.front().IsTextured()) {
+    if (mesh.materials_.front().IsTextured() && mesh.HasTriangleUvIndices()) {
       const auto texture_coordinates_consolidation = GetTextureCoordinatesConsolidation(mesh);
       ConsolidateTextureCoordinateIndicesWithVertices(mesh, texture_coordinates_consolidation);
     }
@@ -704,26 +714,30 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     InitializeGltfMaterial(gltfMaterial, mesh);
     gltfPrimitive.material = gltfModel.materials.size();
     if (material.IsTextured()) {
-      // setup texture coordinates accessor
-      gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
-      tinygltf::Accessor vertexTexcoordAccessor;
-      vertexTexcoordAccessor.bufferView = gltfModel.bufferViews.size();
-      vertexTexcoordAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-      vertexTexcoordAccessor.count = mesh.triangle_uvs_.size();
-      vertexTexcoordAccessor.type = TINYGLTF_TYPE_VEC2;
-      gltfModel.accessors.emplace_back(std::move(vertexTexcoordAccessor));
-      // setup texture coordinates
-      static_assert(2 * sizeof(double) == sizeof(Eigen::Vector2d), "triangle_uvs_ should be continuous");
-      assert(mesh.vertices_.size() == mesh.triangle_uvs_.size());
-      tinygltf::BufferView vertexTexcoordBufferView;
-      vertexTexcoordBufferView.buffer = gltfModel.buffers.size();
-      extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset, vertexTexcoordBufferView.byteLength);
-      gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
+      if (mesh.HasTriangleUvIndices()) {
+        // setup texture coordinates accessor
+        gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
+        tinygltf::Accessor vertexTexcoordAccessor;
+        vertexTexcoordAccessor.bufferView = gltfModel.bufferViews.size();
+        vertexTexcoordAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        vertexTexcoordAccessor.count = mesh.triangle_uvs_.size();
+        vertexTexcoordAccessor.type = TINYGLTF_TYPE_VEC2;
+        gltfModel.accessors.emplace_back(std::move(vertexTexcoordAccessor));
+        // setup texture coordinates
+        static_assert(2 * sizeof(double) == sizeof(Eigen::Vector2d), "triangle_uvs_ should be continuous");
+        assert(mesh.vertices_.size() == mesh.triangle_uvs_.size());
+        tinygltf::BufferView vertexTexcoordBufferView;
+        vertexTexcoordBufferView.buffer = gltfModel.buffers.size();
+        extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset,
+                                             vertexTexcoordBufferView.byteLength);
+        gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
+      }
       // setup material
       gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
       gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
       if (material.gltfExtras.texture_idx.has_value()) {
         assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
+        assert(mesh.HasTriangleUvIndices());
         // setup texture
         tinygltf::Texture texture;
         texture.source = gltfModel.images.size();
