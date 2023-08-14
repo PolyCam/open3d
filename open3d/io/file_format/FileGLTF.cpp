@@ -568,7 +568,8 @@ static std::optional<tinygltf::Image> TrySkippedExternalTexture(const geometry::
 
 // export the mesh as a GLTF file
 bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_mesh) {
-  std::cout << "open3d::io::SaveMeshGLTF()" << std::endl;
+  std::cout << "open3d::io::SaveMeshGLTF() with " << _mesh.materials_.size() << " materials and " << _mesh.triangle_material_ids_.size()
+            << " triangle material ids for " << _mesh.triangles_.size() << " triangles" << std::endl;
 
   const std::string path = utility::filesystem::GetFileParentDirectory(fileName);
   if (!path.empty())
