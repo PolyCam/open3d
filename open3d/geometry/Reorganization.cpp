@@ -186,8 +186,8 @@ void ConsolidateMaterials(TriangleMesh &mesh, const DuplicateConsolidation &cons
   }
 }
 
-static MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(const TriangleMesh &mesh,
-                                                                                const DuplicateConsolidation *consolidation) {
+static MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh,
+                                                                                   const DuplicateConsolidation *consolidation) {
   if (mesh.triangle_material_ids_.empty()) {
     auto unassigned_material_triangle_usage = MaterialTriangleUsage();
     unassigned_material_triangle_usage.reserve(mesh.triangles_.size());
@@ -241,21 +241,21 @@ static MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(
 }
 
 MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh) {
-  auto usage = GetMaterialsTriangleUsageWithInvalids(mesh, nullptr);
+  auto usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, nullptr);
   return (std::move(usage.materials_triangle_usage_));
 }
 
 MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation) {
-  auto usage = GetMaterialsTriangleUsageWithInvalids(mesh, &consolidation);
+  auto usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, &consolidation);
   return (std::move(usage.materials_triangle_usage_));
 }
 
-MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(const TriangleMesh &mesh) {
-  return (GetMaterialsTriangleUsageWithInvalids(mesh, nullptr));
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh) {
+  return (GetMaterialsTriangleUsageWithUnassigneds(mesh, nullptr));
 }
 
-MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation) {
-  return (GetMaterialsTriangleUsageWithInvalids(mesh, &consolidation));
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation) {
+  return (GetMaterialsTriangleUsageWithUnassigneds(mesh, &consolidation));
 }
 
 struct OnlyInUseConsolidation {
@@ -317,11 +317,11 @@ static std::vector<VertexAttribute> GetSingleMaterialMeshVertexAttributes(const 
 }
 
 static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const DuplicateConsolidation *material_consolidation) {
-  const auto materials_triangle_usage = GetMaterialsTriangleUsage(mesh, material_consolidation);
+  const auto materials_triangle_usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, material_consolidation);
   const auto has_material_consolidation = (material_consolidation != nullptr);
   const auto basic_mesh_count =
       (has_material_consolidation ? material_consolidation->consolidated_to_original_indices_.size() : mesh.materials_.size());
-  assert(materials_triangle_usage.size() == basic_mesh_count);
+  assert(materials_triangle_usage.materials_triangle_usage_.size() == basic_mesh_count);
   const auto mesh_count = (materials_triangle_usage.unassigned_material_triangle_usage_.empty() ? basic_mesh_count : (basic_mesh_count + 1u));
   auto single_material_meshes = std::vector<TriangleMesh>();
   single_material_meshes.reserve(mesh_count);
@@ -333,7 +333,7 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
     single_material_mesh.triangles_ = GetSingleMaterialMeshVertexIndices(mesh.triangles_, vertices_in_use_consolidation, material_triangle_usage);
 
     // Add the per triangle material ids.
-    single_material_mesh.triangle_material_ids_.resize(single_material_mesh.triangles_, 0);
+    single_material_mesh.triangle_material_ids_.resize(single_material_mesh.triangles_.size(), 0);
 
     // Add the vertices.
     single_material_mesh.vertices_ = GetSingleMaterialMeshVertexAttributes(mesh.vertices_, vertices_in_use_consolidation);
