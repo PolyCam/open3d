@@ -42,6 +42,17 @@ MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh);
 //! @pre consolidation must have been created by GetMaterialConsolidation() on mesh.
 MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation);
 
+struct MaterialsTriangleUsageWithInvalids {
+  MaterialsTriangleUsage materials_triangle_usage_;
+  MaterialTriangleUsage unassigned_material_triangle_usage_; // Triangles that do not have a valid material index or no material index at all.
+};
+//! @returns The triangles belonging to each material.
+//! @note Does not apply material consolidation.
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(const TriangleMesh &mesh);
+//! @returns The triangles belonging to each material.
+//! @pre consolidation must have been created by GetMaterialConsolidation() on mesh.
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithInvalids(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation);
+
 //! @returns A vector of meshes, each containing just 1 material from the original mesh.
 std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh);
 //! @returns A vector of meshes, each containing just 1 material from the original mesh.
