@@ -474,7 +474,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             // Treat the diffuse texture as the base color texture.
             if (specularGlossiness.Has("diffuseTexture")) {
               base_texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
-              material.gltfExtras.texture_from_specular_glossiness_extension = true;
+              material.gltfExtras.texture_from_specular_glossiness_diffuse = true;
             }
           }
           if (base_texture_idx.has_value()) {
@@ -525,18 +525,21 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           for (auto &[extension_name, extension] : material.gltfExtras.extensions) {
             if (extension.IsObject()) {
               for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
+                if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+                    key == "diffuseTexture") {
+                  // Skip diffuse texture if it's already been read as the base color texture.
+                  continue;
+                }
+                // Assume anything that has an "index" is a texture. This is true for all the material extensions in
+                // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos.
                 if (value.Has("index")) {
                   auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
                   const auto texture_idx = index_value.GetNumberAsInt();
-                  if (texture_idx == base_texture_idx && false) {
-                    index_value = tinygltf::Value(-1);
-                  } else {
-                    const tinygltf::Texture &gltf_texture = model.textures[texture_idx];
-                    if (gltf_texture.source >= 0) {
-                      const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-                      index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
-                      material.gltfExtras.extension_images.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-                    }
+                  const tinygltf::Texture &gltf_texture = model.textures[texture_idx];
+                  if (gltf_texture.source >= 0) {
+                    const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+                    index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
+                    material.gltfExtras.extension_images.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
                   }
                 }
               }
@@ -844,8 +847,10 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
             if (value.Has("index")) {
               auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
-              if (material.gltfExtras.texture_from_specular_glossiness_extension && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+              if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
                   key == "diffuseTexture") {
+                // The texture that was assigned to the metallic-roughness base color texture was actually a
+                // specular-glossiness diffuse texture. Move it from there to here.
                 index_value = tinygltf::Value((int)gltfMaterial.pbrMetallicRoughness.baseColorTexture.index);
                 gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = -1;
                 continue;

@@ -752,7 +752,7 @@ class TriangleMesh : public MeshBase {
       // References to textures in extensions are replaced by indexes into extension_images.
       tinygltf::ExtensionMap extensions;
       std::vector<Image> extension_images;
-      bool texture_from_specular_glossiness_extension = false;
+      bool texture_from_specular_glossiness_diffuse = false;
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
