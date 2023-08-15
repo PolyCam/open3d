@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <tiny_gltf.h>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -748,6 +749,10 @@ class TriangleMesh : public MeshBase {
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
       std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
+      // References to textures in extensions are replaced by indexes into extension_images.
+      tinygltf::ExtensionMap extensions;
+      std::vector<Image> extension_images;
+      bool texture_from_specular_glossiness_extension = false;
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&

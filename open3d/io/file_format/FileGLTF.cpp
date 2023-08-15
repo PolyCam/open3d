@@ -463,19 +463,22 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           material.gltfExtras.doubleSided = gltf_material.doubleSided;
           material.gltfExtras.alphaMode = gltf_material.alphaMode;
           material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
+          material.baseMetallic = gltf_material.pbrMetallicRoughness.metallicFactor;
+          material.baseRoughness = gltf_material.pbrMetallicRoughness.roughnessFactor;
           mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-          auto texture_idx = std::optional<size_t>();
+          auto base_texture_idx = std::optional<size_t>();
           if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-            texture_idx = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
+            base_texture_idx = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
           } else if (const auto it = gltf_material.extensions.find("KHR_materials_pbrSpecularGlossiness"); it != gltf_material.extensions.end()) {
             const auto &specularGlossiness = it->second;
             // Treat the diffuse texture as the base color texture.
             if (specularGlossiness.Has("diffuseTexture")) {
-              texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
+              base_texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
+              material.gltfExtras.texture_from_specular_glossiness_extension = true;
             }
           }
-          if (texture_idx.has_value()) {
-            const tinygltf::Texture &gltf_texture = model.textures[texture_idx.value()];
+          if (base_texture_idx.has_value()) {
+            const tinygltf::Texture &gltf_texture = model.textures[base_texture_idx.value()];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               material.gltfExtras.texture_idx = mesh_temp.textures_.size();
@@ -514,6 +517,29 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
               assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
               material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
+            }
+          }
+
+          // Read any images referenced by extensions.
+          material.gltfExtras.extensions = gltf_material.extensions;
+          for (auto &[extension_name, extension] : material.gltfExtras.extensions) {
+            if (extension.IsObject()) {
+              for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
+                if (value.Has("index")) {
+                  auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
+                  const auto texture_idx = index_value.GetNumberAsInt();
+                  if (texture_idx == base_texture_idx && false) {
+                    index_value = tinygltf::Value(-1);
+                  } else {
+                    const tinygltf::Texture &gltf_texture = model.textures[texture_idx];
+                    if (gltf_texture.source >= 0) {
+                      const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+                      index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
+                      material.gltfExtras.extension_images.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
+                    }
+                  }
+                }
+              }
             }
           }
 
@@ -595,6 +621,8 @@ static void InitializeGltfMaterial(tinygltf::Material &material, const geometry:
       const auto &emissiveFactor = *open3d_material.gltfExtras.emissiveFactor;
       material.emissiveFactor = {emissiveFactor[0], emissiveFactor[1], emissiveFactor[2]};
     }
+    material.pbrMetallicRoughness.metallicFactor = open3d_material.baseMetallic;
+    material.pbrMetallicRoughness.roughnessFactor = open3d_material.baseRoughness;
   }
 }
 
@@ -685,6 +713,8 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     }
   };
 
+  std::unordered_set<std::string> extensions_used;
+
   for (const geometry::TriangleMesh &mesh : meshes) {
     assert(mesh.materials_.size() == 1u);
 
@@ -771,10 +801,10 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
                                              vertexTexcoordBufferView.byteLength);
         gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
       }
-      // setup material
-      gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
-      gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
       if (material.gltfExtras.texture_idx.has_value()) {
+        // setup material
+        gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
+        gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
         assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
         assert(mesh.HasTriangleUvIndices());
         // setup texture
@@ -807,6 +837,31 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         gltfModel.textures.emplace_back(std::move(texture));
         add_image(*material.roughness, "roughness.jpg");
       }
+      gltfMaterial.extensions = material.gltfExtras.extensions;
+      for (auto &[extension_name, extension] : gltfMaterial.extensions) {
+        extensions_used.insert(extension_name);
+        if (extension.IsObject()) {
+          for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
+            if (value.Has("index")) {
+              auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
+              if (material.gltfExtras.texture_from_specular_glossiness_extension && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+                  key == "diffuseTexture") {
+                index_value = tinygltf::Value((int)gltfMaterial.pbrMetallicRoughness.baseColorTexture.index);
+                gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = -1;
+                continue;
+              }
+              const auto idx = index_value.GetNumberAsInt();
+              if (idx >= 0 && idx < material.gltfExtras.extension_images.size()) {
+                index_value = tinygltf::Value((int)gltfModel.images.size());
+                tinygltf::Texture texture;
+                texture.source = gltfModel.images.size();
+                gltfModel.textures.emplace_back(std::move(texture));
+                add_image(material.gltfExtras.extension_images[idx], extension_name + "_" + key + ".jpg");
+              }
+            }
+          }
+        }
+      }
     }
     gltfModel.materials.emplace_back(std::move(gltfMaterial));
 
@@ -824,6 +879,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   gltfModel.asset.generator = "Polycam";
   gltfModel.asset.version = "2.0";
   gltfModel.defaultScene = 0;
+  gltfModel.extensionsUsed.insert(gltfModel.extensionsUsed.begin(), extensions_used.begin(), extensions_used.end());
 
   // setup GLTF
   tinygltf::TinyGLTF gltf;

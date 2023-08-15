@@ -1583,7 +1583,7 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
 
 bool TriangleMesh::Material::IsTextured() const {
   return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
-          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value());
+          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || !gltfExtras.extensions.empty());
 }
 
 bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {
