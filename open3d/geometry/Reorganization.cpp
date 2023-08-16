@@ -370,20 +370,20 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
   if (triangle_uv_usage.has_value()) {
     switch (*triangle_uv_usage) {
       case TriangleMesh::TriangleUvUsage::indices: {
-        effective_triangles_uv_idx = mesh.triangles_uvs_idx_.data();
+        effective_triangles_uv_idx = &mesh.triangles_uvs_idx_;
         break;
       }
       case TriangleMesh::TriangleUvUsage::per_vertex: {
-        effective_triangles_uv_idx = mesh.triangles_.data();
+        effective_triangles_uv_idx = &mesh.triangles_;
         break;
       }
-      case TriangleMesh::TriangleUvUsage::per_vertex: {
+      case TriangleMesh::TriangleUvUsage::per_triangle: {
         per_triangle_effective_triangles_uv_idx.reserve(mesh.triangles_.size());
         while (per_triangle_effective_triangles_uv_idx.size() < mesh.triangles_.size()) {
           const auto base_index = per_triangle_effective_triangles_uv_idx.size() * 3u;
           per_triangle_effective_triangles_uv_idx.push_back(Eigen::Vector3i(base_index, base_index + 1u, base_index + 2u));
         }
-        effective_triangles_uv_idx = per_triangle_effective_triangles_uv_idx.data();
+        effective_triangles_uv_idx = &per_triangle_effective_triangles_uv_idx;
         break;
       }
     }
@@ -400,6 +400,7 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
 
     // Add the texture coordinates, if needed.
     if (material.IsTextured()) {
+      assert(effective_triangles_uv_idx != nullptr);
       const auto texture_coordinates_in_use_consolidation = ConsolidateOnlyInUseVertices(*effective_triangles_uv_idx, material_triangle_usage);
       single_material_mesh.triangles_uvs_idx_ =
           GetSingleMaterialMeshVertexIndices(*effective_triangles_uv_idx, texture_coordinates_in_use_consolidation, material_triangle_usage);
