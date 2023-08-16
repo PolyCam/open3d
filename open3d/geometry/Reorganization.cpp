@@ -401,7 +401,7 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const
   return (SeparateMeshByMaterial(mesh, &material_consolidation));
 }
 
-static inline ShouldMakeEffectiveMaterials(const TriangleMesh &mesh) { return (mesh.materials_.empty() && !mesh.textures_.empty()); }
+static inline bool ShouldMakeEffectiveMaterials(const TriangleMesh &mesh) { return (mesh.materials_.empty() && !mesh.textures_.empty()); }
 
 static std::vector<TriangleMesh::Material> MakeEffectiveMaterials(const std::vector<Image> &textures) {
   auto materials = std::vector<TriangleMesh::Material>();
