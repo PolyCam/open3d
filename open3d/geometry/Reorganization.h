@@ -1,10 +1,10 @@
 #pragma once
 
+#include <open3d/geometry/TriangleMesh.h>
+
 #include <vector>
 
 namespace open3d::geometry {
-
-class TriangleMesh;
 
 struct DuplicateConsolidation {
   std::vector<unsigned int> original_to_consolidated_indices_;
@@ -44,7 +44,7 @@ MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh, const
 
 struct MaterialsTriangleUsageWithInvalids {
   MaterialsTriangleUsage materials_triangle_usage_;
-  MaterialTriangleUsage unassigned_material_triangle_usage_; // Triangles that do not have a valid material index or no material index at all.
+  MaterialTriangleUsage unassigned_material_triangle_usage_;  // Triangles that do not have a valid material index or no material index at all.
 };
 //! @returns The triangles belonging to each material.
 //! @note Does not apply material consolidation.

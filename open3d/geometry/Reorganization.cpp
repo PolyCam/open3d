@@ -1,5 +1,4 @@
 #include <open3d/geometry/Reorganization.h>
-#include <open3d/geometry/TriangleMesh.h>
 
 #include <algorithm>
 #include <cassert>
