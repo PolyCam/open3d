@@ -61,6 +61,8 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const
 
 //! @returns On meshes that have no materials but have textures, returns materials referencing these textures. Returns mesh.materials_ otherwise.
 std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &mesh);
+//! @brief On meshes that have no materials but have textures, makes materials_ reference these textures. Otherwise, does nothing.
+void MakeEffectiveMaterials(TriangleMesh &mesh);
 bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials);
 
 }  // namespace open3d::geometry

@@ -322,10 +322,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     for (auto &material : effective_materials) {
       if (material.name.has_value()) {
         if ((material.name->length() > object_name_prefix.length())
-                ? (std::equal(object_name_prefix.begin(), object_name_prefix.end(), material.name->begin()))
-                : false) {
-          // The material name already has the object_name_prefix prefix, do nothing.
-        } else {
+                ? !std::equal(object_name_prefix.begin(), object_name_prefix.end(), material.name->begin())
+                : true) {
           // The material name needs the object_name_prefix prefix added.
           material.name = object_name_prefix + *material.name;
         }

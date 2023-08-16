@@ -401,19 +401,31 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const
   return (SeparateMeshByMaterial(mesh, &material_consolidation));
 }
 
+static inline ShouldMakeEffectiveMaterials(const TriangleMesh &mesh) { return (mesh.materials_.empty() && !mesh.textures_.empty()); }
+
+static std::vector<TriangleMesh::Material> MakeEffectiveMaterials(const std::vector<Image> &textures) {
+  auto materials = std::vector<TriangleMesh::Material>();
+  materials.reserve(textures.size());
+  auto material = geometry::TriangleMesh::Material();
+  material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+  while (materials.size() < textures.size()) {
+    material.gltfExtras.texture_idx = materials.size();
+    materials.push_back(material);
+  }
+  return (materials);
+}
+
 std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &mesh) {
-  if (mesh.materials_.empty() && !mesh.textures_.empty()) {
-    auto materials = std::vector<TriangleMesh::Material>();
-    materials.reserve(mesh.textures_.size());
-    auto material = geometry::TriangleMesh::Material();
-    material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
-    while (materials.size() < mesh.textures_.size()) {
-      material.gltfExtras.texture_idx = materials.size();
-      materials.push_back(material);
-    }
-    return (materials);
+  if (ShouldMakeEffectiveMaterials(mesh)) {
+    return (MakeEffectiveMaterials(mesh.textures_));
   } else {
     return (mesh.materials_);
+  }
+}
+
+void MakeEffectiveMaterials(TriangleMesh &mesh) {
+  if (ShouldMakeEffectiveMaterials(mesh)) {
+    mesh.materials_ = MakeEffectiveMaterials(mesh.textures_);
   }
 }
 
