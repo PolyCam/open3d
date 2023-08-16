@@ -1695,7 +1695,7 @@ bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
   return (false);
 }
 
-std::optional<TriangleUvUsage> TriangleMesh::GetTriangleUvUsage() const {
+std::optional<TriangleMesh::TriangleUvUsage> TriangleMesh::GetTriangleUvUsage() const {
   if (triangles_.empty()) {
     // No triangles, so the UVs don't matter anyway.
     return (std::optional<TriangleUvUsage>());
