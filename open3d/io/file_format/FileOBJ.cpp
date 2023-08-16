@@ -437,7 +437,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     if (default_material_name.has_value()) {
       auto default_material = geometry::TriangleMesh::Material();
       default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
-      add_material(default_material, &default_material_name);
+      add_material(default_material, *default_material_name);
     }
 
     // write textures (if existing)
