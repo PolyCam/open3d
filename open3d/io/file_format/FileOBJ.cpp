@@ -30,6 +30,7 @@
 #include <chrono>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -313,6 +314,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
   // figure out the material names
   std::vector<std::string> material_names;
+  std::optional<std::string> default_material_name;
   if (mesh.HasTriangleMaterialIds()) {
     auto unnamed_material_count = 0u;
     material_names.reserve(mesh.materials_.size());
@@ -339,7 +341,11 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // enumerate ids and their corresponding faces
   for (auto it = material_id_faces_map.begin(); it != material_id_faces_map.end(); ++it) {
     // write the mtl name
-    std::string mtl_name = material_names[it->first];
+    const auto valid_material = (it->first >= 0u && it->first < material_names.size());
+    if (!valid_material && !default_material_name.has_value()) {
+      default_material_name = object_name + "_default";
+    }
+    const std::string &mtl_name = (valid_material ? material_names[it->first] : *default_material_name;
     format_to(std::back_inserter(out), "usemtl {}\n", mtl_name.c_str());
 
     // write the corresponding faces
@@ -393,11 +399,9 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
-    for (auto material_index = 0u; material_index < mesh.materials_.size(); ++material_index) {
-      const auto &material = mesh.materials_[material_index];
+    auto add_material = [&](const geometry::TriangleMesh::Material &material, const std::string &mtl_name) {
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
       std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string) "-1");
-      const auto &mtl_name = material_names[material_index];
       if (!texture_idx.has_value()) {  // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
@@ -426,6 +430,14 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         if (material.roughness)
           mtl_file << "map_Pr " << mtl_name << "_roughness" << material_postfix << "\n";
       }
+    };
+    for (auto material_index = 0u; material_index < mesh.materials_.size(); ++material_index) {
+      add_material(mesh.materials_[material_index], material_names[material_index]);
+    }
+    if (default_material_name.has_value()) {
+      auto default_material = geometry::TriangleMesh::Material();
+      default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+      add_material(default_material, &default_material_name);
     }
 
     // write textures (if existing)
