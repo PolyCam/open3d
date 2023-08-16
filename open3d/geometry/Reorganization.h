@@ -14,14 +14,18 @@ struct DuplicateConsolidation {
 
 DuplicateConsolidation GetTextureCoordinatesConsolidation(const TriangleMesh &mesh);
 //! @brief Ensures that all elements in mesh.triangle_uvs_ are unique.
+//! @pre mesh.GetTriangleUvUsage() == TriangleMesh::TriangleUvUsage::indices, if mesh has UVs.
 void ConsolidateTextureCoordinates(TriangleMesh &mesh);
 //! @pre consolidation must have been created by GetTextureCoordinatesConsolidation() on mesh.
 //! @brief Ensures that all elements in mesh.triangle_uvs_ are unique.
+//! @pre mesh.GetTriangleUvUsage() == TriangleMesh::TriangleUvUsage::indices, if mesh has UVs.
 void ConsolidateTextureCoordinates(TriangleMesh &mesh, const DuplicateConsolidation &consolidation);
 
-//! @brief Reorganizes mesh such that for every element in mesh.triangles_ the corresponding element in mesh.triangle_uvs_idx_ is the same.
+//! @brief Reorganizes mesh such that for every element in mesh.vertices_ there is a corresponding element in mesh.triangle_uvs_ and
+//! mesh.triangles_uvs_idx_ is cleared altogether.
 void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, const DuplicateConsolidation &texture_coordinates_consolidation);
-//! @brief Reorganizes mesh such that for every element in mesh.triangles_ the corresponding element in mesh.triangle_uvs_idx_ is the same.
+//! @brief Reorganizes mesh such that for every element in mesh.vertices_ there is a corresponding element in mesh.triangle_uvs_ and
+//! mesh.triangles_uvs_idx_ is cleared altogether.
 void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh);
 
 DuplicateConsolidation GetMaterialConsolidation(const TriangleMesh &mesh);
