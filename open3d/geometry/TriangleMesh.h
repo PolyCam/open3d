@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -85,6 +86,14 @@ class TriangleMesh : public MeshBase {
   bool HasTriangleUvs() const {
     return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
   }
+
+  enum class TriangleUvUsage {
+    indices,      // Use triangles_uvs_idx_.
+    per_vertex,   // triangle_uvs_ correspond to vertices_.
+    per_triangle  // triangle_uvs_ correspond to each of the 3 vertices per triangle.
+  };
+  std::optional<TriangleUvUsage> GetTriangleUvUsage() const;
+  Eigen::Vector3i GetTriangleUvIndices(unsigned int triangle, TriangleUvUsage usage) const;
 
   bool HasTriangleUvs_Any() const {
     bool valid_uv = false;

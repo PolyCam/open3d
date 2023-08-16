@@ -1695,5 +1695,43 @@ bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
   return (false);
 }
 
+std::optional<TriangleUvUsage> TriangleMesh::GetTriangleUvUsage() const {
+  if (triangles_.empty()) {
+    // No triangles, so the UVs don't matter anyway.
+    return (std::optional<TriangleUvUsage>());
+  }
+  if (triangle_uvs_.empty()) {
+    // No UVs at all.
+    return (std::optional<TriangleUvUsage>());
+  } else if (triangles_uvs_idx_.size() == triangles_.size()) {
+    return (TriangleUvUsage::indices);
+  } else if (!triangles_uvs_idx_.empty()) {
+    // There are triangle UV indices, but they don't match the triangles, something isn't right.
+    return (std::optional<TriangleUvUsage>());
+  } else if (triangle_uvs_.size() == vertices_.size()) {
+    return (TriangleUvUsage::per_vertex);
+  } else if (triangle_uvs_.size() == triangles_.size() * 3u) {
+    return (TriangleUvUsage::per_triangle);
+  } else {
+    // No triangles, so the UVs don't matter anyway.
+    return (std::optional<TriangleUvUsage>());
+  }
+}
+
+Eigen::Vector3i TriangleMesh::GetTriangleUvIndices(unsigned int triangle, TriangleUvUsage usage) const {
+  switch (usage) {
+    case TriangleUvUsage::indices: {
+      return (triangles_uvs_idx_[triangle]);
+    }
+    case TriangleUvUsage::per_vertex: {
+      return (triangles_[triangle]);
+    }
+    case TriangleUvUsage::per_triangle: {
+      const auto base_index = triangle * 3u;
+      return (Eigen::Vector3i(base_index, base_index + 1u, base_index + 2u));
+    }
+  }
+}
+
 }  // namespace geometry
 }  // namespace open3d
