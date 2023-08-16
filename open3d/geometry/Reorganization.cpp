@@ -402,4 +402,25 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const
   return (SeparateMeshByMaterial(mesh, &material_consolidation));
 }
 
+std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &mesh) {
+  if (mesh.materials_.empty() && !mesh.textures_.empty()) {
+    auto materials = std::vector<TriangleMesh::Material>();
+    materials.reserve(mesh.textures_.size());
+    auto material = geometry::TriangleMesh::Material();
+    material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+    while (materials.size() < mesh.textures_.size()) {
+      material.gltfExtras.texture_idx = materials.size();
+      materials.push_back(material);
+    }
+    return (materials);
+  } else {
+    return (mesh.materials_);
+  }
+}
+
+bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials) {
+  return (std::any_of(materials.begin(), materials.end(),
+                      [&](const TriangleMesh::Material &material) { return (material.gltfExtras.texture_idx == texture); }));
+}
+
 }  // namespace open3d::geometry

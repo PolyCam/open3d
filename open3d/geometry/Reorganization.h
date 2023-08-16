@@ -59,4 +59,8 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh);
 //! @pre consolidation must have been created by GetMaterialConsolidation() on mesh.
 std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const DuplicateConsolidation &material_consolidation);
 
+//! @returns On meshes that have no materials but have textures, returns materials referencing these textures. Returns mesh.materials_ otherwise.
+std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &mesh);
+bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials);
+
 }  // namespace open3d::geometry
