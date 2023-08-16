@@ -34,7 +34,7 @@
 #include <random>
 #include <vector>
 
-#include "open3d/geometry/Reorganization.h>
+#include "open3d/geometry/Reorganization.h"
 #include "open3d/io/FileFormatIO.h"
 #include "open3d/io/ImageIO.h"
 #include "open3d/io/TriangleMeshIO.h"
@@ -350,7 +350,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     for (auto tidx : it->second) {
       const Eigen::Vector3i &triangle = mesh.triangles_[tidx];
       const auto triangle_uvs_idx =
-          triangle_uv_usage.has_value ? std::make_optional(mesh.GetTriangleUvIndices(tidex, *triangle_uv_usage)) : std::optional<Eigen::Vector3i>();
+          triangle_uv_usage.has_value() ? std::make_optional(mesh.GetTriangleUvIndices(tidx, *triangle_uv_usage)) : std::optional<Eigen::Vector3i>();
       bool write_triangle_uv =
           triangle_uvs_idx.has_value() ? ((*triangle_uvs_idx)(0) >= 0 && (*triangle_uvs_idx)(1) >= 0 && (*triangle_uvs_idx)(2) >= 0) : false;
       if (write_vertex_normals && write_triangle_uv) {
@@ -400,7 +400,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
     auto add_material = [&](const geometry::TriangleMesh::Material &material) {
-      const auto &mtl_name = *material.name();
+      const auto &mtl_name = *material.name;
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
       std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string) "-1");
       if (!texture_idx.has_value()) {  // Solid color - not a texture
