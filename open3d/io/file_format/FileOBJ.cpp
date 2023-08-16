@@ -345,7 +345,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     if (!valid_material && !default_material_name.has_value()) {
       default_material_name = object_name + "_default";
     }
-    const std::string &mtl_name = (valid_material ? material_names[it->first] : *default_material_name;
+    const std::string &mtl_name = (valid_material ? material_names[it->first] : *default_material_name);
     format_to(std::back_inserter(out), "usemtl {}\n", mtl_name.c_str());
 
     // write the corresponding faces
