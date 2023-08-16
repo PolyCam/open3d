@@ -327,7 +327,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
           // The material name already has the object_name_prefix prefix, do nothing.
         } else {
           // The material name needs the object_name_prefix prefix added.
-          material.name = push_back(object_name_prefix + *material.name);
+          material.name = object_name_prefix + *material.name;
         }
       } else {
         material.name = object_name_prefix + std::to_string(unnamed_material_count);
