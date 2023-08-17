@@ -720,7 +720,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset, vertexTexcoordBufferView.byteLength);
       gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
       // setup material
-      auto setup_texture = [&](const geometry::Image &image, const std::string &temporary_file_name, tinygltf::TextureInfo &texture_info) {
+      auto setup_texture = [&](const geometry::Image &image, const std::string &temporary_file_name, auto &texture_info) {
         texture_info.index = gltfModel.textures.size();
         texture_info.texCoord = 0;
         tinygltf::Texture texture;
