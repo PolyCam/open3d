@@ -69,4 +69,7 @@ std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &me
 void MakeEffectiveMaterials(TriangleMesh &mesh);
 bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials);
 
+//! @pre mesh.GetTriangleUvUsage().has_value()
+void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage);
+
 }  // namespace open3d::geometry

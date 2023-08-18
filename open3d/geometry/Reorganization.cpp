@@ -472,4 +472,46 @@ bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Materi
                       [&](const TriangleMesh::Material &material) { return (material.gltfExtras.texture_idx == texture); }));
 }
 
+void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage) {
+  const auto old_usage = mesh.GetTriangleUvUsage();
+  assert(old_usage.has_value());
+  if (usage == *old_usage) {
+    return;
+  }
+  switch (usage) {
+    case TriangleMesh::TriangleUvUsage::indices: {
+      auto uv_indices = std::vector<Eigen::Vector3i>();
+      uv_indices.reserve(mesh.triangles_.size());
+      while (uv_indices.size() < mesh.triangles_.size()) {
+        uv_indices.push_back(mesh.GetTriangleUvIndices(uv_indices.size(), *old_usage));
+      }
+      mesh.triangles_uvs_idx_ = std::move(uv_indices);
+      break;
+    }
+    case TriangleMesh::TriangleUvUsage::per_vertex: {
+      ConsolidateTextureCoordinateIndicesWithVertices(mesh);
+      break;
+    }
+    case TriangleMesh::TriangleUvUsage::per_triangle: {
+      auto uvs = std::vector<Eigen::Vector2d>();
+      uvs.reserve(mesh.triangles_.size() * 3u);
+      for (auto triangle = 0u; triangle < mesh.triangles_.size(); ++triangle) {
+        const auto uv_indices = mesh.GetTriangleUvIndices(triangle, *old_usage);
+        for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
+          const auto uvs_index = uv_indices[vertex_in_triangle];
+          if (uvs_index >= 0) {
+            uvs.push_back(mesh.triangle_uvs_[uvs_index]);
+          } else {
+            uvs.push_back(Eigen::Vector2d(0.0, 0.0));
+          }
+        }
+      }
+      assert(uvs.size() == mesh.triangles_.size() * 3u);
+      mesh.triangle_uvs_ = std::move(uvs);
+      mesh.triangles_uvs_idx_.clear();
+      break;
+    }
+  }
+}
+
 }  // namespace open3d::geometry
