@@ -117,6 +117,12 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
     assert(mesh.triangle_uvs_.empty());
     return;
   }
+  if (*uv_usage == TriangleMesh::TriangleUvUsage::indices && texture_coordinates_consolidation == nullptr) {
+    if (mesh.triangles_ == mesh.triangles_uvs_idx_) {
+      mesh.triangles_uvs_idx_.clear();
+      return;
+    }
+  }
   assert((texture_coordinates_consolidation != nullptr)
              ? (texture_coordinates_consolidation->original_to_consolidated_indices_.size() == mesh.triangle_uvs_.size())
              : true);
