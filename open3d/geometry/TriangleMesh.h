@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -86,6 +87,14 @@ class TriangleMesh : public MeshBase {
     return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
   }
 
+  enum class TriangleUvUsage {
+    indices,      // Use triangles_uvs_idx_.
+    per_vertex,   // triangle_uvs_ correspond to vertices_.
+    per_triangle  // triangle_uvs_ correspond to each of the 3 vertices per triangle.
+  };
+  std::optional<TriangleUvUsage> GetTriangleUvUsage() const;
+  Eigen::Vector3i GetTriangleUvIndices(unsigned int triangle, TriangleUvUsage usage) const;
+
   bool HasTriangleUvs_Any() const {
     bool valid_uv = false;
     for (const auto &tri : triangles_uvs_idx_) {
@@ -96,6 +105,8 @@ class TriangleMesh : public MeshBase {
     }
     return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
   }
+
+  bool HasTriangleUvIndices() const { return (!triangles_uvs_idx_.empty()); }
 
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
@@ -658,12 +669,14 @@ class TriangleMesh : public MeshBase {
   /// The set adjacency_list[i] contains the indices of adjacent vertices of
   /// vertex i.
   std::vector<std::unordered_set<int>> adjacency_list_;
-  /// List of uv coordinates per triangle.
+  /// List of uv coordinates (referenced by triangles_uvs_idx_).
   std::vector<Eigen::Vector2d> triangle_uvs_;
-  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx
+  /// Optional (added by polycam). Valid if same length as triangles_. -1 if no texture. Otherwise = uvs idx (index into triangle_uvs_).
   std::vector<Eigen::Vector3i> triangles_uvs_idx_;
 
   struct Material {
+    bool IsTextured() const;
+
     struct MaterialParameter {
       float f4[4] = {0};
 
@@ -708,6 +721,8 @@ class TriangleMesh : public MeshBase {
 
       bool operator!=(const MaterialParameter &other) const { return (!(*this == other)); }
 
+      bool operator<(const MaterialParameter &other) const;
+
       static MaterialParameter CreateRGB(const float r, const float g, const float b) { return {r, g, b, 1.f}; }
 
       float r() const { return f4[0]; }
@@ -734,9 +749,6 @@ class TriangleMesh : public MeshBase {
     std::shared_ptr<Image> clearCoatRoughness;
     std::shared_ptr<Image> anisotropy;
 
-    std::unordered_map<std::string, MaterialParameter> floatParameters;
-    std::unordered_map<std::string, Image> additionalMaps;
-
     // Additional properties added by polycam to more accurately model a gltf/glb material
     // as neccessary for properly round tripping materials for roomplan captures.
     struct GltfExtras {
@@ -744,7 +756,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
-      std::optional<unsigned int> texture_idx; // If this material should point to a texture, provide the idx
+      std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
@@ -752,16 +764,24 @@ class TriangleMesh : public MeshBase {
       }
 
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }
+      bool operator<(const GltfExtras &other) const;
     };
     GltfExtras gltfExtras;
+
+    std::optional<std::string> name;
+
+    bool operator==(const Material &other) const;
+    bool operator!=(const Material &other) const { return (!(*this == other)); }
+    bool operator<(const Material &other) const;
+
+    bool IsEqualIgnoringName(const Material &other) const;
+    bool IsBeforeIgnoringName(const Material &other) const;
   };
 
-  std::map<std::string, Material> materials_;
+  std::vector<Material> materials_;
 
-  /// List of material ids.
+  /// List of material ids (indices into materials_, same size as triangles_)
   std::vector<int> triangle_material_ids_;
-  /// List of material ids. If refers to a texture, material will point to the texture ID. (Added by polycam)
-  std::vector<int> triangle_material_texture_ids_;
   /// Textures of the image.
   std::vector<Image> textures_;
   /// Texture file names of the image (optional - if exist and are identical to the memory textures).

@@ -26,12 +26,15 @@
 
 #include <tiny_obj_loader.h>
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <vector>
 
+#include "open3d/geometry/Reorganization.h"
 #include "open3d/io/FileFormatIO.h"
 #include "open3d/io/ImageIO.h"
 #include "open3d/io/TriangleMeshIO.h"
@@ -164,8 +167,9 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
 
   using MaterialParameter = geometry::TriangleMesh::Material::MaterialParameter;
 
+  mesh.materials_.reserve(materials.size());
   for (auto &material : materials) {
-    auto &meshMaterial = mesh.materials_[material.name];
+    auto meshMaterial = geometry::TriangleMesh::Material();
 
     meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
 
@@ -223,6 +227,9 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     meshMaterial.baseClearCoat = material.clearcoat_thickness;
     meshMaterial.baseClearCoatRoughness = material.clearcoat_roughness;
     meshMaterial.baseAnisotropy = material.anisotropy;
+
+    meshMaterial.name = material.name;
+    mesh.materials_.push_back(std::move(meshMaterial));
   }
 
   return true;
@@ -233,6 +240,9 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
                             bool write_triangle_uvs /* = true*/, bool print_progress) {
   const auto timer_start = std::chrono::high_resolution_clock::now();
   std::string object_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(filename));
+  std::string object_name_prefix = object_name + '_';
+  const auto triangle_uv_usage = mesh.GetTriangleUvUsage();
+  auto effective_materials = GetEffectiveMaterials(mesh);
 
   std::ofstream file(filename.c_str(), std::ios::out | std::ios::binary);
   if (!file) {
@@ -291,8 +301,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   // map faces with material ids
   std::map<int, std::vector<size_t>> material_id_faces_map;
   if (mesh.HasTriangleMaterialIds()) {
-    for (size_t i = 0; i < mesh.triangle_material_texture_ids_.size(); ++i) {
-      int mi = mesh.triangle_material_texture_ids_[i];
+    for (size_t i = 0; i < mesh.triangle_material_ids_.size(); ++i) {
+      int mi = mesh.triangle_material_ids_[i];
       auto it = material_id_faces_map.find(mi);
       if (it == material_id_faces_map.end()) {
         material_id_faces_map[mi] = {i};
@@ -305,23 +315,48 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
     std::iota(material_id_faces_map[0].begin(), material_id_faces_map[0].end(), 0);
   }
 
+  // figure out the material names
+  std::optional<std::string> default_material_name;
+  auto unnamed_material_count = 0u;
+  if (mesh.HasTriangleMaterialIds()) {
+    for (auto &material : effective_materials) {
+      if (material.name.has_value()) {
+        if ((material.name->length() > object_name_prefix.length())
+                ? !std::equal(object_name_prefix.begin(), object_name_prefix.end(), material.name->begin())
+                : true) {
+          // The material name needs the object_name_prefix prefix added.
+          material.name = object_name_prefix + *material.name;
+        }
+      } else {
+        material.name = object_name_prefix + std::to_string(unnamed_material_count);
+        ++unnamed_material_count;
+      }
+    }
+  }
+
   // enumerate ids and their corresponding faces
   for (auto it = material_id_faces_map.begin(); it != material_id_faces_map.end(); ++it) {
     // write the mtl name
-    std::string mtl_name = object_name + "_" + std::to_string(it->first);
+    const auto valid_material = (it->first >= 0u && it->first < effective_materials.size());
+    if (!valid_material && !default_material_name.has_value()) {
+      default_material_name = object_name + "_default";
+    }
+    const std::string &mtl_name = (valid_material ? *effective_materials[it->first].name : *default_material_name);
     format_to(std::back_inserter(out), "usemtl {}\n", mtl_name.c_str());
 
     // write the corresponding faces
     for (auto tidx : it->second) {
       const Eigen::Vector3i &triangle = mesh.triangles_[tidx];
-      const Eigen::Vector3i &triangle_uvs_idx = mesh.triangles_uvs_idx_[tidx];
-      bool write_triangle_uv = triangle_uvs_idx(0) >= 0 && triangle_uvs_idx(1) >= 0 && triangle_uvs_idx(2) >= 0;
+      const auto triangle_uvs_idx =
+          triangle_uv_usage.has_value() ? std::make_optional(mesh.GetTriangleUvIndices(tidx, *triangle_uv_usage)) : std::optional<Eigen::Vector3i>();
+      bool write_triangle_uv =
+          triangle_uvs_idx.has_value() ? ((*triangle_uvs_idx)(0) >= 0 && (*triangle_uvs_idx)(1) >= 0 && (*triangle_uvs_idx)(2) >= 0) : false;
       if (write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(0) + 1, triangle(1) + 1,
-                  triangle_uvs_idx(1) + 1, triangle(1) + 1, triangle(2) + 1, triangle_uvs_idx(2) + 1, triangle(2) + 1);
+        format_to(std::back_inserter(out), "f {}/{}/{} {}/{}/{} {}/{}/{}\n", triangle(0) + 1, (*triangle_uvs_idx)(0) + 1, triangle(0) + 1,
+                  triangle(1) + 1, (*triangle_uvs_idx)(1) + 1, triangle(1) + 1, triangle(2) + 1, (*triangle_uvs_idx)(2) + 1, triangle(2) + 1);
       } else if (!write_vertex_normals && write_triangle_uv) {
-        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, triangle_uvs_idx(0) + 1, triangle(1) + 1, triangle_uvs_idx(1) + 1, triangle(2) + 1,
-                  triangle_uvs_idx(2) + 1);
+        format_to(std::back_inserter(out), "f {}/{} {}/{} {}/{}\n", triangle(0) + 1, (*triangle_uvs_idx)(0) + 1, triangle(1) + 1,
+                  (*triangle_uvs_idx)(1) + 1, triangle(2) + 1, (*triangle_uvs_idx)(2) + 1);
       } else if (write_vertex_normals && !write_triangle_uv) {
         format_to(std::back_inserter(out), "f {}//{} {}//{} {}//{}\n", triangle(0) + 1, triangle(0) + 1, triangle(1) + 1, triangle(1) + 1,
                   triangle(2) + 1, triangle(2) + 1);
@@ -362,12 +397,11 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
-    for (auto it : mesh.materials_) {
-      const geometry::TriangleMesh::Material &material = it.second;
+    auto add_material = [&](const geometry::TriangleMesh::Material &material) {
+      const auto &mtl_name = *material.name;
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
-      std::string mtl_name = object_name + "_" + it.first;
-      std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string)"-1");
-      if (!texture_idx.has_value()) { // Solid color - not a texture
+      std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string) "-1");
+      if (!texture_idx.has_value()) {  // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
@@ -378,8 +412,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
           mtl_file << "Ks 0.000 0.000 0.000\n";
         mtl_file << "d " << material.baseColor.a() << "\n";
         mtl_file << "illum 1\n";
-        mtl_file << "Ns 1.000000\n"; // Spectral exponent
-      } else { // Texture
+        mtl_file << "Ns 1.000000\n";  // Spectral exponent
+      } else {                        // Texture
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
         mtl_file << "Kd 1.000 1.000 1.000\n";
@@ -395,12 +429,21 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         if (material.roughness)
           mtl_file << "map_Pr " << mtl_name << "_roughness" << material_postfix << "\n";
       }
+    };
+    for (auto material_index = 0u; material_index < effective_materials.size(); ++material_index) {
+      add_material(effective_materials[material_index]);
+    }
+    if (default_material_name.has_value()) {
+      auto default_material = geometry::TriangleMesh::Material();
+      default_material.name = *default_material_name;
+      default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+      add_material(default_material);
     }
 
     // write textures (if existing)
     auto write_texture = [&](size_t i) {
       // Don't write images for which no face was seen.
-      if (material_id_faces_map.find(i) == material_id_faces_map.end())
+      if (!IsTextureInUse(i, effective_materials))
         return;
       std::string tex_name = object_name + "_" + std::to_string(i);
       std::string tex_filename = parent_dir + tex_name + material_postfix;
@@ -409,10 +452,8 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         utility::LogWarning("Write OBJ successful, but failed to write texture file.");
       }
 
-      if (i < mesh.materials_.size()) {
-        auto it = mesh.materials_.begin();
-        std::advance(it, i);
-        const geometry::TriangleMesh::Material &material = it->second;
+      if (i < effective_materials.size()) {
+        const geometry::TriangleMesh::Material &material = effective_materials[i];
         if (material.normalMap) {
           std::string tex_filename = parent_dir + tex_name + "_norm" + material_postfix;
           if (!io::WriteImage(tex_filename, *material.normalMap)) {
@@ -441,15 +482,6 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       write_texture(i);
     }
 #endif
-
-    // write the default material
-    if (!mesh.HasTextures()) {
-      std::string mtl_name = object_name + "_0";
-      mtl_file << "newmtl " << mtl_name << "\n";
-      mtl_file << "Ka 1.000 1.000 1.000\n";
-      mtl_file << "Kd 1.000 1.000 1.000\n";
-      mtl_file << "Ks 0.000 0.000 0.000\n";
-    }
   }
 
   const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - timer_start).count();

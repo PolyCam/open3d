@@ -34,6 +34,7 @@
 #include <numeric>
 #include <vector>
 
+#include "open3d/geometry/Reorganization.h"
 #include "open3d/io/FileFormatIO.h"
 #include "open3d/io/ImageIO.h"
 #include "open3d/io/TriangleMeshIO.h"
@@ -386,7 +387,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 
         // read texture and material
         if (primitive.material >= 0) {
-          geometry::TriangleMesh::Material &material = mesh_temp.materials_[std::to_string(mesh.materials_.size())];
+          auto material = geometry::TriangleMesh::Material();
           const tinygltf::Material &gltf_material = model.materials[primitive.material];
           const auto &color = gltf_material.pbrMetallicRoughness.baseColorFactor;
           if (color.size() == 4u) {
@@ -400,13 +401,12 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           material.gltfExtras.alphaMode = gltf_material.alphaMode;
           material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
           mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-          mesh_temp.triangle_material_texture_ids_.resize(mesh_temp.triangles_.size(), 0);
           if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
             const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.baseColorTexture.index];
             if (gltf_texture.source >= 0) {
               const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+              material.gltfExtras.texture_idx = mesh_temp.textures_.size();
               mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-              material.gltfExtras.texture_idx = mesh.textures_.size();
               std::vector<Eigen::Vector2d> triangle_uvs_;
               FOREACH(i, mesh_temp.triangles_) {
                 const Eigen::Vector3i &face = mesh_temp.triangles_[i];
@@ -443,6 +443,8 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
               material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
             }
           }
+
+          mesh_temp.materials_.push_back(std::move(material));
         }
 
         if (gltf_node.matrix.size() > 0) {
@@ -472,21 +474,25 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           if (gltf_node.translation.size() > 0) {
             mesh_temp.Translate(Eigen::Vector3d(gltf_node.translation[0], gltf_node.translation[1], gltf_node.translation[2]));
           }
+
+          // Handle missing or excess materials or attributes.
+          if (mesh_temp.materials_.empty()) {
+            auto default_material = geometry::TriangleMesh::Material();
+            default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+            mesh_temp.materials_.push_back(default_material);
+          }
+          if (mesh_temp.triangle_material_ids_.empty()) {
+            mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
+          }
+          if (mesh_temp.textures_.empty()) {
+            mesh_temp.triangle_uvs_.clear();
+            mesh_temp.triangles_uvs_idx_.clear();
+          }
+
           mesh += mesh_temp;
         }
       }
     }
-  }
-
-  if (mesh.materials_.empty()) {
-    mesh.materials_.insert(std::make_pair("0", geometry::TriangleMesh::Material()));
-  }
-  if (mesh.triangle_material_ids_.empty()) {
-    mesh.triangle_material_ids_.resize(mesh.triangles_.size(), 0);
-  }
-  if (mesh.textures_.empty()) {
-    mesh.triangle_uvs_.clear();
-    mesh.triangles_uvs_idx_.clear();
   }
 
   return true;
@@ -524,291 +530,11 @@ void extendBufferConvert(const std::vector<TIN> &src, tinygltf::Buffer &dst, siz
   ptr_dst[i] = src[i].template cast<typename TOUT::Scalar>();
 }
 
-typedef unsigned VIndex;
-const VIndex NO_ID = VIndex(-1);
-
-geometry::TriangleMesh ConvertMeshToTexCoordPerVertex(const geometry::TriangleMesh &srcMesh) {
-  assert(srcMesh.HasTriangleUvs());
-  const size_t new_num_vertices = srcMesh.vertices_.size() * 4 / 3;
-  geometry::TriangleMesh mesh;
-  mesh.vertices_.reserve(new_num_vertices);
-  mesh.vertices_ = srcMesh.vertices_;
-  if (srcMesh.HasVertexNormals()) {
-    mesh.vertex_normals_.reserve(new_num_vertices);
-    mesh.vertex_normals_ = srcMesh.vertex_normals_;
-  }
-  mesh.triangles_.resize(srcMesh.triangles_.size());
-  mesh.triangle_uvs_.reserve(new_num_vertices);
-  mesh.triangle_uvs_.resize(srcMesh.vertices_.size());
-  mesh.triangle_material_ids_.reserve(new_num_vertices);
-  mesh.triangle_material_ids_.resize(srcMesh.vertices_.size());
-  std::vector<VIndex> mapVertices;
-  mapVertices.reserve(new_num_vertices);
-  mapVertices.resize(srcMesh.vertices_.size(), NO_ID);
-  FOREACH(idxF, srcMesh.triangles_) {
-    const auto &face = srcMesh.triangles_[idxF];
-    const int tb = srcMesh.triangle_material_ids_[idxF];
-    auto &new_face = mesh.triangles_[idxF];
-    for (int i = 0; i < 3; ++i) {
-      const auto &tc = srcMesh.triangle_uvs_[idxF * 3 + i];
-      VIndex idxV(face[i]);
-      while (true) {
-        VIndex &idxVT = mapVertices[idxV];
-        if (idxVT == NO_ID) {
-          // vertex not seen yet, so use it directly
-          new_face[i] = idxVT = idxV;
-          mesh.triangle_material_ids_[idxV] = tb;
-          mesh.triangle_uvs_[idxV] = tc;
-          break;
-        }
-        // vertex already seen in a previous face;
-        // check if they share also the texture coordinates
-        if (mesh.triangle_material_ids_[idxV] == tb && mesh.triangle_uvs_[idxV] == tc) {
-          // same texture coordinates, use it
-          new_face[i] = idxV;
-          break;
-        }
-        if (idxVT == idxV) {
-          // duplicate vertex
-          mapVertices.emplace_back(new_face[i] = idxVT = mesh.vertices_.size());
-          mesh.vertices_.emplace_back(srcMesh.vertices_[face[i]]);
-          if (srcMesh.HasVertexNormals())
-            mesh.vertex_normals_.emplace_back(srcMesh.vertex_normals_[face[i]]);
-          mesh.triangle_material_ids_.emplace_back(tb);
-          mesh.triangle_uvs_.emplace_back(tc);
-          break;
-        }
-        // continue with the next linked vertex;
-        // all share the same position, but different texture coordinates
-        idxV = idxVT;
-      }
-    }
-  }
-  mesh.materials_ = srcMesh.materials_;
-  mesh.textures_ = srcMesh.textures_;
-  mesh.textures_names_ = srcMesh.textures_names_;
-  return mesh;
-}
-
-std::vector<geometry::TriangleMesh> ConvertMeshToOneMeshPerTexblob(const geometry::TriangleMesh &srcMesh) {
-  assert(srcMesh.HasTriangleUvs());
-  assert(srcMesh.vertices_.size() == srcMesh.triangle_uvs_.size());
-  assert(srcMesh.vertices_.size() == srcMesh.triangle_uvs_.size());
-  assert(srcMesh.textures_.size() == *std::max_element(srcMesh.triangle_material_ids_.begin(), srcMesh.triangle_material_ids_.end()) + 1);
-  const size_t num_meshes(srcMesh.textures_.size());
-  if (num_meshes == 1)
-    return std::vector<geometry::TriangleMesh>{srcMesh};
-  std::vector<geometry::TriangleMesh> meshes(num_meshes);
-  std::vector<std::vector<VIndex>> mapsVertices(num_meshes, std::vector<VIndex>(srcMesh.vertices_.size(), NO_ID));
-  for (const auto &face : srcMesh.triangles_) {
-    assert(srcMesh.triangle_material_ids_[face[0]] == srcMesh.triangle_material_ids_[face[1]] &&
-           srcMesh.triangle_material_ids_[face[1]] == srcMesh.triangle_material_ids_[face[2]]);
-    const int tb = srcMesh.triangle_material_ids_[face[0]];
-    geometry::TriangleMesh &mesh = meshes[tb];
-    std::vector<VIndex> &mapVertices = mapsVertices[tb];
-    Eigen::Vector3i new_face;
-    for (int v = 0; v < 3; ++v) {
-      const VIndex idxV = face[v];
-      VIndex &idxVT = mapVertices[idxV];
-      if (idxVT == NO_ID) {
-        // vertex not seen yet, fill it
-        idxVT = mesh.vertices_.size();
-        mesh.vertices_.emplace_back(srcMesh.vertices_[idxV]);
-        if (srcMesh.HasVertexNormals())
-          mesh.vertex_normals_.emplace_back(srcMesh.vertex_normals_[idxV]);
-        mesh.triangle_uvs_.emplace_back(srcMesh.triangle_uvs_[idxV]);
-      }
-      new_face[v] = idxVT;
-    }
-    mesh.triangles_.emplace_back(new_face);
-  }
-  assert(srcMesh.textures_names_.empty() || srcMesh.textures_.size() == srcMesh.textures_names_.size());
-  RFOREACH(i, meshes) {
-    if (meshes[i].IsEmpty()) {
-      meshes.erase(meshes.begin() + i);
-      continue;
-    }
-    meshes[i].textures_.emplace_back(srcMesh.textures_[i]);
-    if (!srcMesh.textures_names_.empty())
-      meshes[i].textures_names_.emplace_back(srcMesh.textures_names_[i]);
-    if (!srcMesh.materials_.empty()) {
-      auto it = srcMesh.materials_.begin();
-      std::advance(it, i);
-      meshes[i].materials_.emplace(*it);
-    }
-  }
-  return meshes;
-}
-
-static bool CompareUntextureMaterials(const geometry::TriangleMesh::Material &first, const geometry::TriangleMesh::Material &second) {
-  assert(!(bool)first.albedo && !(bool)second.albedo);                          // Textures unsupported.
-  assert(!(bool)first.normalMap && !(bool)second.normalMap);                    // Textures unsupported.
-  assert(!(bool)first.ambientOcclusion && !(bool)second.ambientOcclusion);      // Textures unsupported.
-  assert(!(bool)first.metallic && !(bool)second.metallic);                      // Textures unsupported.
-  assert(!(bool)first.roughness && !(bool)second.roughness);                    // Textures unsupported.
-  assert(!(bool)first.reflectance && !(bool)second.reflectance);                // Textures unsupported.
-  assert(!(bool)first.clearCoat && !(bool)second.clearCoat);                    // Textures unsupported.
-  assert(!(bool)first.clearCoatRoughness && !(bool)second.clearCoatRoughness);  // Textures unsupported.
-  assert(!(bool)first.anisotropy && !(bool)second.anisotropy);                  // Textures unsupported.
-  assert(first.additionalMaps.empty() && second.additionalMaps.empty());        // Textures unsupported.
-
-  return (first.baseColor == second.baseColor && first.baseMetallic == second.baseMetallic && first.baseRoughness == second.baseRoughness &&
-          first.baseReflectance == second.baseReflectance && first.baseClearCoat == second.baseClearCoat &&
-          first.baseClearCoatRoughness == second.baseClearCoatRoughness && first.baseAnisotropy == second.baseAnisotropy &&
-          first.floatParameters == second.floatParameters && first.gltfExtras == second.gltfExtras);
-}
-
-static geometry::TriangleMesh ConsolidateUntexturedMaterials(const geometry::TriangleMesh &srcMesh) {
-  assert(srcMesh.HasTriangleMaterialIds());
-  assert(!srcMesh.HasTriangleUvs());  // Unsupported
-  auto from_original_material_mapping = std::vector<unsigned int>();
-  from_original_material_mapping.reserve(srcMesh.materials_.size());
-  auto new_materials = std::vector<geometry::TriangleMesh::Material>();
-  auto find_existing_new_material = [&](const geometry::TriangleMesh::Material &material) {
-    for (auto new_material = 0u; new_material < new_materials.size(); ++new_material) {
-      if (CompareUntextureMaterials(new_materials[new_material], material)) {
-        return (std::make_optional(new_material));
-      }
-    }
-    return (std::optional<unsigned int>());
-  };
-  new_materials.reserve(srcMesh.materials_.size());
-  while (from_original_material_mapping.size() < srcMesh.materials_.size()) {
-    const auto material = srcMesh.materials_.find(std::to_string(from_original_material_mapping.size()));
-    assert(material != srcMesh.materials_.end());
-    auto existing_new_material = find_existing_new_material(material->second);
-    if (existing_new_material.has_value()) {
-      from_original_material_mapping.push_back(*existing_new_material);
-    } else {
-      from_original_material_mapping.push_back(new_materials.size());
-      new_materials.push_back(material->second);
-    }
-  }
-
-  // All the materials are indeed unique.
-  if (new_materials.size() == srcMesh.materials_.size()) {
-    return (srcMesh);
-  }
-
-  auto mesh = srcMesh;
-  mesh.materials_.clear();
-  for (auto new_material = 0u; new_material < new_materials.size(); ++new_material) {
-    mesh.materials_.insert(std::make_pair(std::to_string(new_material), new_materials[new_material]));
-  }
-  for (auto &triangle_material_id : mesh.triangle_material_ids_) {
-    assert(triangle_material_id < srcMesh.materials_.size());
-    triangle_material_id = from_original_material_mapping[triangle_material_id];
-  }
-  return (mesh);
-}
-
-static std::vector<geometry::TriangleMesh> ConvertMeshToOneMeshPerUntextureMaterial(const geometry::TriangleMesh &srcMesh) {
-  assert(!srcMesh.HasTriangleUvs());      // Unsupported.
-  assert(!srcMesh.HasAdjacencyList());    // Unsupported.
-  assert(!srcMesh.HasTriangleNormals());  // Unsupported.
-  if (srcMesh.materials_.empty() || srcMesh.materials_.size() == 1u) {
-    return (std::vector<geometry::TriangleMesh>({srcMesh}));
-  }
-  assert(srcMesh.triangle_material_ids_.size() == srcMesh.triangles_.size());
-
-  auto meshes = std::vector<geometry::TriangleMesh>();
-  meshes.reserve(srcMesh.materials_.size());
-  const auto unused_vertex = (unsigned int)srcMesh.vertices_.size();
-
-  //! @note Reused across processing of each material for the sake of efficiency and not thrashing the heap.
-  auto from_original_vertex_mapping = std::vector<unsigned int>(srcMesh.vertices_.size());
-
-  for (auto material_in_mesh = 0u; material_in_mesh < srcMesh.materials_.size(); ++material_in_mesh) {
-    auto mesh = geometry::TriangleMesh();
-
-    // Find the mapping from included original vertices to new vertices as well as count how many triangles to include.
-    auto included_vertices = 0u;
-    auto included_triangles = 0u;
-    std::fill(from_original_vertex_mapping.begin(), from_original_vertex_mapping.end(), unused_vertex);
-    for (auto triangle_in_mesh = 0u; triangle_in_mesh < srcMesh.triangles_.size(); ++triangle_in_mesh) {
-      if (srcMesh.triangle_material_ids_[triangle_in_mesh] == material_in_mesh) {
-        const auto &triangle = srcMesh.triangles_[triangle_in_mesh];
-        ++included_triangles;
-        for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
-          const auto original_vertex = triangle[vertex_in_triangle];
-          assert(original_vertex < srcMesh.vertices_.size());
-          if (from_original_vertex_mapping[original_vertex] == unused_vertex) {
-            from_original_vertex_mapping[original_vertex] = included_vertices;
-            ++included_vertices;
-          }
-        }
-      }
-    }
-
-    // Fill the vertices.
-    mesh.vertices_.resize(included_vertices);
-    for (auto vertex_in_mesh = 0u; vertex_in_mesh < srcMesh.vertices_.size(); ++vertex_in_mesh) {
-      const auto vertex = from_original_vertex_mapping[vertex_in_mesh];
-      if (vertex != unused_vertex) {
-        mesh.vertices_[vertex] = srcMesh.vertices_[vertex_in_mesh];
-      }
-    }
-
-    // Fill the vertex normal, if applicable.
-    if (mesh.HasVertexNormals()) {
-      assert(srcMesh.vertex_normals_.size() == srcMesh.vertices_.size());
-      mesh.vertex_normals_.resize(included_vertices);
-      for (auto vertex_in_mesh = 0u; vertex_in_mesh < srcMesh.vertices_.size(); ++vertex_in_mesh) {
-        const auto vertex = from_original_vertex_mapping[vertex_in_mesh];
-        if (vertex != unused_vertex) {
-          mesh.vertex_normals_[vertex] = srcMesh.vertex_normals_[vertex_in_mesh];
-        }
-      }
-    }
-
-    // Fill the vertex colors, if applicable.
-    if (mesh.HasVertexColors()) {
-      assert(srcMesh.vertex_normals_.size() == srcMesh.vertices_.size());
-      mesh.vertex_colors_.resize(included_vertices);
-      for (auto vertex_in_mesh = 0u; vertex_in_mesh < srcMesh.vertices_.size(); ++vertex_in_mesh) {
-        const auto vertex = from_original_vertex_mapping[vertex_in_mesh];
-        if (vertex != unused_vertex) {
-          mesh.vertex_colors_[vertex] = srcMesh.vertex_colors_[vertex_in_mesh];
-        }
-      }
-    }
-
-    // Fill the triangles, if applicable.
-    mesh.triangles_.reserve(included_triangles);
-    mesh.triangle_material_ids_.reserve(included_triangles);
-    for (auto triangle_in_mesh = 0u; triangle_in_mesh < srcMesh.triangles_.size(); ++triangle_in_mesh) {
-      if (srcMesh.triangle_material_ids_[triangle_in_mesh] == material_in_mesh) {
-        const auto &original_triangle = srcMesh.triangles_[triangle_in_mesh];
-        auto new_triangle = Eigen::Vector3i();
-        for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
-          const auto original_vertex = original_triangle[vertex_in_triangle];
-          const auto new_vertex = from_original_vertex_mapping[original_vertex];
-          assert(new_vertex != unused_vertex);
-          assert(new_vertex < included_vertices);
-          new_triangle[vertex_in_triangle] = new_vertex;
-        }
-        mesh.triangles_.push_back(new_triangle);
-        mesh.triangle_material_ids_.push_back(0u);
-      }
-    }
-    assert(mesh.triangles_.size() == included_triangles);
-    assert(mesh.triangle_material_ids_.size() == included_triangles);
-
-    // Add the material and mesh.
-    const auto material_name = std::to_string(material_in_mesh);
-    const auto material = srcMesh.materials_.find(material_name);
-    assert(material != srcMesh.materials_.end());
-    mesh.materials_.insert(std::make_pair("0", material->second));
-    meshes.push_back(std::move(mesh));
-  }
-  return (meshes);
-}
-
 static void InitializeGltfMaterial(tinygltf::Material &material, const geometry::TriangleMesh &mesh) {
   material.pbrMetallicRoughness.metallicFactor = 0.0;
   material.pbrMetallicRoughness.roughnessFactor = 1.0;
   if (mesh.materials_.size() == 1u) {
-    const auto &open3d_material = mesh.materials_.begin()->second;
+    const auto &open3d_material = mesh.materials_.front();
     const auto &color = open3d_material.baseColor;
     if (color != geometry::TriangleMesh::Material::MaterialParameter()) {
       material.pbrMetallicRoughness.baseColorFactor = {color.f4[0], color.f4[1], color.f4[2], color.f4[3]};
@@ -846,13 +572,15 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(fileName);
   const bool bBinary(filename_ext == "glb");
 
-  // split mesh such that the texture coordinates are per vertex instead of per
-  // face
-  std::vector<geometry::TriangleMesh> meshes;
-  if (_mesh.HasTriangleUvs())
-    meshes = ConvertMeshToOneMeshPerTexblob(ConvertMeshToTexCoordPerVertex(_mesh));
-  else
-    meshes = ConvertMeshToOneMeshPerUntextureMaterial(ConsolidateUntexturedMaterials(_mesh));
+  const auto material_consolidation = GetMaterialConsolidation(_mesh);
+  auto meshes = SeparateMeshByMaterial(_mesh, material_consolidation);
+  for (auto &mesh : meshes) {
+    assert(mesh.materials_.size() == 1u);
+    if (mesh.materials_.front().IsTextured()) {
+      const auto texture_coordinates_consolidation = GetTextureCoordinatesConsolidation(mesh);
+      ConsolidateTextureCoordinateIndicesWithVertices(mesh, texture_coordinates_consolidation);
+    }
+  }
 
   // create GLTF model
   tinygltf::Model gltfModel;
@@ -909,6 +637,8 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   };
 
   for (const geometry::TriangleMesh &mesh : meshes) {
+    assert(mesh.materials_.size() == 1u);
+
     tinygltf::Primitive gltfPrimitive;
 
     // setup vertices
@@ -969,7 +699,11 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     }
 
     // setup material
-    if (mesh.HasTriangleUvs()) {
+    const geometry::TriangleMesh::Material &material = mesh.materials_.front();
+    tinygltf::Material gltfMaterial;
+    InitializeGltfMaterial(gltfMaterial, mesh);
+    gltfPrimitive.material = gltfModel.materials.size();
+    if (material.IsTextured()) {
       // setup texture coordinates accessor
       gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
       tinygltf::Accessor vertexTexcoordAccessor;
@@ -986,54 +720,30 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset, vertexTexcoordBufferView.byteLength);
       gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
       // setup material
-      gltfPrimitive.material = gltfModel.materials.size();
-      tinygltf::Material gltfMaterial;
-      InitializeGltfMaterial(gltfMaterial, mesh);
-      gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
-      gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
-      {
-        // setup texture
+      auto setup_texture = [&](const geometry::Image &image, const std::string &temporary_file_name, auto &texture_info) {
+        texture_info.index = gltfModel.textures.size();
+        texture_info.texCoord = 0;
         tinygltf::Texture texture;
         texture.source = gltfModel.images.size();
         gltfModel.textures.emplace_back(std::move(texture));
-        assert(mesh.textures_.size() == 1);
-        add_image(mesh.textures_[0], "texture.jpg");
+        add_image(image, temporary_file_name);
+      };
+      if (material.gltfExtras.texture_idx.has_value()) {
+        setup_texture(mesh.textures_[*material.gltfExtras.texture_idx], "texture.jpg", gltfMaterial.pbrMetallicRoughness.baseColorTexture);
+      } else if (material.albedo) {
+        setup_texture(*material.albedo, "texture.jpg", gltfMaterial.pbrMetallicRoughness.baseColorTexture);
       }
-      assert(mesh.materials_.empty() || mesh.materials_.size() == 1);
-      if (!mesh.materials_.empty()) {
-        const geometry::TriangleMesh::Material &material = mesh.materials_.begin()->second;
-        if (material.normalMap) {
-          gltfMaterial.normalTexture.index = gltfModel.textures.size();
-          // setup texture
-          tinygltf::Texture texture;
-          texture.source = gltfModel.images.size();
-          gltfModel.textures.emplace_back(std::move(texture));
-          add_image(*material.normalMap, "normal.jpg");
-        }
-        if (material.ambientOcclusion) {
-          gltfMaterial.occlusionTexture.index = gltfModel.textures.size();
-          // setup texture
-          tinygltf::Texture texture;
-          texture.source = gltfModel.images.size();
-          gltfModel.textures.emplace_back(std::move(texture));
-          add_image(*material.ambientOcclusion, "occlusion.jpg");
-        }
-        if (material.roughness) {
-          gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index = gltfModel.textures.size();
-          // setup texture
-          tinygltf::Texture texture;
-          texture.source = gltfModel.images.size();
-          gltfModel.textures.emplace_back(std::move(texture));
-          add_image(*material.roughness, "roughness.jpg");
-        }
+      if (material.normalMap) {
+        setup_texture(*material.normalMap, "normal.jpg", gltfMaterial.normalTexture);
       }
-      gltfModel.materials.emplace_back(std::move(gltfMaterial));
-    } else {
-      tinygltf::Material gltfMaterial;
-      InitializeGltfMaterial(gltfMaterial, mesh);
-      gltfPrimitive.material = gltfModel.materials.size();
-      gltfModel.materials.emplace_back(std::move(gltfMaterial));
+      if (material.ambientOcclusion) {
+        setup_texture(*material.ambientOcclusion, "occlusion.jpg", gltfMaterial.occlusionTexture);
+      }
+      if (material.roughness) {
+        setup_texture(*material.roughness, "roughness.jpg", gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture);
+      }
     }
+    gltfModel.materials.emplace_back(std::move(gltfMaterial));
 
     gltfMesh.primitives.emplace_back(std::move(gltfPrimitive));
   }
