@@ -804,41 +804,28 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
                                              vertexTexcoordBufferView.byteLength);
         gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
       }
-      if (material.gltfExtras.texture_idx.has_value()) {
-        // setup material
-        gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = gltfModel.textures.size();
-        gltfMaterial.pbrMetallicRoughness.baseColorTexture.texCoord = 0;
-        assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
-        assert(mesh.HasTriangleUvIndices());
-        // setup texture
+      // setup material
+      auto setup_texture = [&](const geometry::Image &image, const std::string &temporary_file_name, auto &texture_info) {
+        texture_info.index = gltfModel.textures.size();
+        texture_info.texCoord = 0;
         tinygltf::Texture texture;
         texture.source = gltfModel.images.size();
         gltfModel.textures.emplace_back(std::move(texture));
-        add_image(mesh.textures_[*material.gltfExtras.texture_idx], "texture.jpg");
+        add_image(image, temporary_file_name);
+      };
+      if (material.gltfExtras.texture_idx.has_value()) {
+        setup_texture(mesh.textures_[*material.gltfExtras.texture_idx], "texture.jpg", gltfMaterial.pbrMetallicRoughness.baseColorTexture);
+      } else if (material.albedo) {
+        setup_texture(*material.albedo, "texture.jpg", gltfMaterial.pbrMetallicRoughness.baseColorTexture);
       }
       if (material.normalMap) {
-        gltfMaterial.normalTexture.index = gltfModel.textures.size();
-        // setup texture
-        tinygltf::Texture texture;
-        texture.source = gltfModel.images.size();
-        gltfModel.textures.emplace_back(std::move(texture));
-        add_image(*material.normalMap, "normal.jpg");
+        setup_texture(*material.normalMap, "normal.jpg", gltfMaterial.normalTexture);
       }
       if (material.ambientOcclusion) {
-        gltfMaterial.occlusionTexture.index = gltfModel.textures.size();
-        // setup texture
-        tinygltf::Texture texture;
-        texture.source = gltfModel.images.size();
-        gltfModel.textures.emplace_back(std::move(texture));
-        add_image(*material.ambientOcclusion, "occlusion.jpg");
+        setup_texture(*material.ambientOcclusion, "occlusion.jpg", gltfMaterial.occlusionTexture);
       }
       if (material.roughness) {
-        gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index = gltfModel.textures.size();
-        // setup texture
-        tinygltf::Texture texture;
-        texture.source = gltfModel.images.size();
-        gltfModel.textures.emplace_back(std::move(texture));
-        add_image(*material.roughness, "roughness.jpg");
+        setup_texture(*material.roughness, "roughness.jpg", gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture);
       }
       gltfMaterial.extensions = material.gltfExtras.extensions;
       for (auto &[extension_name, extension] : gltfMaterial.extensions) {
@@ -846,22 +833,21 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         if (extension.IsObject()) {
           for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
             if (value.Has("index")) {
-              auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
+              auto &texture_info_obj = value.Get<tinygltf::Value::Object>();
               if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
                   key == "diffuseTexture") {
                 // The texture that was assigned to the metallic-roughness base color texture was actually a
                 // specular-glossiness diffuse texture. Move it from there to here.
-                index_value = tinygltf::Value((int)gltfMaterial.pbrMetallicRoughness.baseColorTexture.index);
+                texture_info_obj["index"] = tinygltf::Value((int)gltfMaterial.pbrMetallicRoughness.baseColorTexture.index);
                 gltfMaterial.pbrMetallicRoughness.baseColorTexture.index = -1;
                 continue;
               }
-              const auto idx = index_value.GetNumberAsInt();
+              const auto idx = texture_info_obj["index"].GetNumberAsInt();
               if (idx >= 0 && idx < material.gltfExtras.extension_images.size()) {
-                index_value = tinygltf::Value((int)gltfModel.images.size());
-                tinygltf::Texture texture;
-                texture.source = gltfModel.images.size();
-                gltfModel.textures.emplace_back(std::move(texture));
-                add_image(material.gltfExtras.extension_images[idx], extension_name + "_" + key + ".jpg");
+                tinygltf::TextureInfo texture_info;
+                setup_texture(material.gltfExtras.extension_images[idx], extension_name + "_" + key + ".jpg", texture_info);
+                texture_info_obj["index"] = tinygltf::Value(texture_info.index);
+                texture_info_obj["texCoord"] = tinygltf::Value(texture_info.texCoord);
               }
             }
           }

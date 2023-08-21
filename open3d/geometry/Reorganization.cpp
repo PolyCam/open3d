@@ -1,5 +1,4 @@
 #include <open3d/geometry/Reorganization.h>
-#include <open3d/geometry/TriangleMesh.h>
 
 #include <algorithm>
 #include <cassert>
@@ -83,6 +82,7 @@ void ConsolidateTextureCoordinates(TriangleMesh &mesh, const DuplicateConsolidat
   if (!consolidation.ShouldConsolidate()) {
     return;
   }
+  assert(mesh.GetTriangleUvUsage() == TriangleMesh::TriangleUvUsage::indices);
   ApplyConsolidation(mesh.triangle_uvs_, consolidation);
   for (auto &triangle_uv_indices : mesh.triangles_uvs_idx_) {
     for (auto vertex_in_triangle_index = 0u; vertex_in_triangle_index < 3u; ++vertex_in_triangle_index) {
@@ -112,7 +112,17 @@ static std::size_t HashTexturedVertex(const TexturedVertex &indices) {
 }
 
 static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, const DuplicateConsolidation *texture_coordinates_consolidation) {
-  assert(mesh.triangles_uvs_idx_.size() == mesh.triangles_.size());
+  const auto uv_usage = mesh.GetTriangleUvUsage();
+  if (!uv_usage.has_value()) {
+    assert(mesh.triangle_uvs_.empty());
+    return;
+  }
+  if (*uv_usage == TriangleMesh::TriangleUvUsage::indices && texture_coordinates_consolidation == nullptr) {
+    if (mesh.triangles_ == mesh.triangles_uvs_idx_) {
+      mesh.triangles_uvs_idx_.clear();
+      return;
+    }
+  }
   assert((texture_coordinates_consolidation != nullptr)
              ? (texture_coordinates_consolidation->original_to_consolidated_indices_.size() == mesh.triangle_uvs_.size())
              : true);
@@ -128,12 +138,12 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
           mesh.triangles_.size() * 3u, &HashTexturedVertex);
   for (auto triangle_index = 0u; triangle_index < mesh.triangles_.size(); ++triangle_index) {
     auto &triangle = mesh.triangles_[triangle_index];
-    auto &triangle_uv_indices = mesh.triangles_uvs_idx_[triangle_index];
+    const auto triangle_uv_indices = mesh.GetTriangleUvIndices(triangle_index, *uv_usage);
     for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
       auto &vertex = triangle[vertex_in_triangle];
       assert(vertex >= 0);
       assert(vertex < mesh.vertices_.size());
-      auto &vertex_uv_indices = triangle_uv_indices[vertex_in_triangle];
+      const auto vertex_uv_indices = triangle_uv_indices[vertex_in_triangle];
       assert(vertex_uv_indices >= 0);
       assert(vertex_uv_indices < mesh.triangle_uvs_.size());
       const auto insertion_result = duplication_eliminator.insert(std::make_pair(
@@ -146,11 +156,11 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
         texture_coordinates.push_back(mesh.triangle_uvs_[vertex_uv_indices]);
       }
       vertex = insertion_result.first->second;
-      vertex_uv_indices = vertex;
     }
   }
   vertices.shrink_to_fit();
   mesh.vertices_ = std::move(vertices);
+  mesh.triangles_uvs_idx_.clear();
   texture_coordinates.shrink_to_fit();
   mesh.triangle_uvs_ = std::move(texture_coordinates);
 }
@@ -186,24 +196,40 @@ void ConsolidateMaterials(TriangleMesh &mesh, const DuplicateConsolidation &cons
   }
 }
 
-static MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh, const DuplicateConsolidation *consolidation) {
+static MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh,
+                                                                                   const DuplicateConsolidation *consolidation) {
+  if (mesh.triangle_material_ids_.empty()) {
+    auto unassigned_material_triangle_usage = MaterialTriangleUsage();
+    unassigned_material_triangle_usage.reserve(mesh.triangles_.size());
+    while (unassigned_material_triangle_usage.size() < mesh.triangles_.size()) {
+      unassigned_material_triangle_usage.push_back(unassigned_material_triangle_usage.size());
+    }
+    return (MaterialsTriangleUsageWithInvalids{MaterialsTriangleUsage(), std::move(unassigned_material_triangle_usage)});
+  }
   assert(mesh.triangle_material_ids_.size() == mesh.triangles_.size());
   auto intermediate_materials_triangle_usage = std::vector<std::list<unsigned int>>(
       (consolidation != nullptr) ? consolidation->consolidated_to_original_indices_.size() : mesh.materials_.size());
+  auto intermediate_unassigned_material_triangle_usage = std::list<unsigned int>();
   if (consolidation != nullptr) {
     assert(consolidation->original_to_consolidated_indices_.size() == mesh.materials_.size());
     for (auto triangle = 0u; triangle < mesh.triangles_.size(); ++triangle) {
       const auto original_material = mesh.triangle_material_ids_[triangle];
-      assert(original_material < consolidation->original_to_consolidated_indices_.size());
-      const auto consolidated_material = consolidation->original_to_consolidated_indices_[original_material];
-      assert(consolidated_material < consolidation->consolidated_to_original_indices_.size());
-      intermediate_materials_triangle_usage[consolidated_material].push_back(triangle);
+      if (original_material >= 0 && original_material < consolidation->original_to_consolidated_indices_.size()) {
+        const auto consolidated_material = consolidation->original_to_consolidated_indices_[original_material];
+        assert(consolidated_material < consolidation->consolidated_to_original_indices_.size());
+        intermediate_materials_triangle_usage[consolidated_material].push_back(triangle);
+      } else {
+        intermediate_unassigned_material_triangle_usage.push_back(triangle);
+      }
     }
   } else {
     for (auto triangle = 0u; triangle < mesh.triangles_.size(); ++triangle) {
       const auto material = mesh.triangle_material_ids_[triangle];
-      assert(material < mesh.materials_.size());
-      intermediate_materials_triangle_usage[material].push_back(triangle);
+      if (material >= 0 && material < mesh.materials_.size()) {
+        intermediate_materials_triangle_usage[material].push_back(triangle);
+      } else {
+        intermediate_unassigned_material_triangle_usage.push_back(triangle);
+      }
     }
   }
   auto materials_triangle_usage = MaterialsTriangleUsage();
@@ -216,13 +242,30 @@ static MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh
     }
     materials_triangle_usage.push_back(std::move(material_triangle_usage));
   }
-  return (materials_triangle_usage);
+  auto unassigned_material_triangle_usage = MaterialTriangleUsage();
+  unassigned_material_triangle_usage.reserve(intermediate_unassigned_material_triangle_usage.size());
+  for (const auto triangle : intermediate_unassigned_material_triangle_usage) {
+    unassigned_material_triangle_usage.push_back(triangle);
+  }
+  return (MaterialsTriangleUsageWithInvalids{std::move(materials_triangle_usage), std::move(unassigned_material_triangle_usage)});
 }
 
-MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh) { return (GetMaterialsTriangleUsage(mesh, nullptr)); }
+MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh) {
+  auto usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, nullptr);
+  return (std::move(usage.materials_triangle_usage_));
+}
 
 MaterialsTriangleUsage GetMaterialsTriangleUsage(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation) {
-  return (GetMaterialsTriangleUsage(mesh, &consolidation));
+  auto usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, &consolidation);
+  return (std::move(usage.materials_triangle_usage_));
+}
+
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh) {
+  return (GetMaterialsTriangleUsageWithUnassigneds(mesh, nullptr));
+}
+
+MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation) {
+  return (GetMaterialsTriangleUsageWithUnassigneds(mesh, &consolidation));
 }
 
 struct OnlyInUseConsolidation {
@@ -284,24 +327,23 @@ static std::vector<VertexAttribute> GetSingleMaterialMeshVertexAttributes(const 
 }
 
 static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const DuplicateConsolidation *material_consolidation) {
+  const auto materials_triangle_usage = GetMaterialsTriangleUsageWithUnassigneds(mesh, material_consolidation);
   const auto has_material_consolidation = (material_consolidation != nullptr);
-  const auto mesh_count = (has_material_consolidation ? material_consolidation->consolidated_to_original_indices_.size() : mesh.materials_.size());
+  const auto basic_mesh_count =
+      (has_material_consolidation ? material_consolidation->consolidated_to_original_indices_.size() : mesh.materials_.size());
+  assert(materials_triangle_usage.materials_triangle_usage_.size() == basic_mesh_count);
+  const auto mesh_count = (materials_triangle_usage.unassigned_material_triangle_usage_.empty() ? basic_mesh_count : (basic_mesh_count + 1u));
   auto single_material_meshes = std::vector<TriangleMesh>();
   single_material_meshes.reserve(mesh_count);
-  const auto materials_triangle_usage = GetMaterialsTriangleUsage(mesh, material_consolidation);
-  assert(materials_triangle_usage.size() == mesh_count);
-  for (auto mesh_index = 0u; mesh_index < mesh_count; ++mesh_index) {
-    const auto &material_triangle_usage = materials_triangle_usage[mesh_index];
-    if (material_triangle_usage.empty()) {
-      continue;
-    }
-    const auto &material =
-        mesh.materials_[has_material_consolidation ? material_consolidation->consolidated_to_original_indices_[mesh_index] : mesh_index];
+  auto create_single_material_mesh = [&](const MaterialTriangleUsage &material_triangle_usage) {
     const auto vertices_in_use_consolidation = ConsolidateOnlyInUseVertices(mesh.triangles_, material_triangle_usage);
     auto single_material_mesh = TriangleMesh();
 
     // Add the triangles.
     single_material_mesh.triangles_ = GetSingleMaterialMeshVertexIndices(mesh.triangles_, vertices_in_use_consolidation, material_triangle_usage);
+
+    // Add the per triangle material ids.
+    single_material_mesh.triangle_material_ids_.resize(single_material_mesh.triangles_.size(), 0);
 
     // Add the vertices.
     single_material_mesh.vertices_ = GetSingleMaterialMeshVertexAttributes(mesh.vertices_, vertices_in_use_consolidation);
@@ -325,11 +367,49 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
       }
     }
 
+    return (single_material_mesh);
+  };
+
+  const auto triangle_uv_usage = mesh.GetTriangleUvUsage();
+  const auto *effective_triangles_uv_idx = (const std::vector<Eigen::Vector3i> *)nullptr;
+  auto per_triangle_effective_triangles_uv_idx = std::vector<Eigen::Vector3i>();
+  if (triangle_uv_usage.has_value()) {
+    switch (*triangle_uv_usage) {
+      case TriangleMesh::TriangleUvUsage::indices: {
+        effective_triangles_uv_idx = &mesh.triangles_uvs_idx_;
+        break;
+      }
+      case TriangleMesh::TriangleUvUsage::per_vertex: {
+        effective_triangles_uv_idx = &mesh.triangles_;
+        break;
+      }
+      case TriangleMesh::TriangleUvUsage::per_triangle: {
+        per_triangle_effective_triangles_uv_idx.reserve(mesh.triangles_.size());
+        while (per_triangle_effective_triangles_uv_idx.size() < mesh.triangles_.size()) {
+          const auto base_index = per_triangle_effective_triangles_uv_idx.size() * 3u;
+          per_triangle_effective_triangles_uv_idx.push_back(Eigen::Vector3i(base_index, base_index + 1u, base_index + 2u));
+        }
+        effective_triangles_uv_idx = &per_triangle_effective_triangles_uv_idx;
+        break;
+      }
+    }
+  }
+
+  for (auto mesh_index = 0u; mesh_index < basic_mesh_count; ++mesh_index) {
+    const auto &material_triangle_usage = materials_triangle_usage.materials_triangle_usage_[mesh_index];
+    if (material_triangle_usage.empty()) {
+      continue;
+    }
+    const auto &material =
+        mesh.materials_[has_material_consolidation ? material_consolidation->consolidated_to_original_indices_[mesh_index] : mesh_index];
+    auto single_material_mesh = create_single_material_mesh(material_triangle_usage);
+
     // Add the texture coordinates, if needed.
-    if (material.IsTextured() && mesh.HasTriangleUvIndices()) {
-      const auto texture_coordinates_in_use_consolidation = ConsolidateOnlyInUseVertices(mesh.triangles_uvs_idx_, material_triangle_usage);
+    if (material.IsTextured()) {
+      assert(effective_triangles_uv_idx != nullptr);
+      const auto texture_coordinates_in_use_consolidation = ConsolidateOnlyInUseVertices(*effective_triangles_uv_idx, material_triangle_usage);
       single_material_mesh.triangles_uvs_idx_ =
-          GetSingleMaterialMeshVertexIndices(mesh.triangles_uvs_idx_, texture_coordinates_in_use_consolidation, material_triangle_usage);
+          GetSingleMaterialMeshVertexIndices(*effective_triangles_uv_idx, texture_coordinates_in_use_consolidation, material_triangle_usage);
       single_material_mesh.triangle_uvs_ = GetSingleMaterialMeshVertexAttributes(mesh.triangle_uvs_, texture_coordinates_in_use_consolidation);
     }
 
@@ -343,6 +423,13 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
 
     single_material_meshes.push_back(std::move(single_material_mesh));
   }
+  if (!materials_triangle_usage.unassigned_material_triangle_usage_.empty()) {
+    auto single_material_mesh = create_single_material_mesh(materials_triangle_usage.unassigned_material_triangle_usage_);
+    auto default_material = geometry::TriangleMesh::Material();
+    default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+    single_material_mesh.materials_.push_back(std::move(default_material));
+    single_material_meshes.push_back(std::move(single_material_mesh));
+  }
   return (single_material_meshes);
 }
 
@@ -350,6 +437,81 @@ std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh) { ret
 
 std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const DuplicateConsolidation &material_consolidation) {
   return (SeparateMeshByMaterial(mesh, &material_consolidation));
+}
+
+static inline bool ShouldMakeEffectiveMaterials(const TriangleMesh &mesh) { return (mesh.materials_.empty() && !mesh.textures_.empty()); }
+
+static std::vector<TriangleMesh::Material> MakeEffectiveMaterials(const std::vector<Image> &textures) {
+  auto materials = std::vector<TriangleMesh::Material>();
+  materials.reserve(textures.size());
+  auto material = geometry::TriangleMesh::Material();
+  material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+  while (materials.size() < textures.size()) {
+    material.gltfExtras.texture_idx = materials.size();
+    materials.push_back(material);
+  }
+  return (materials);
+}
+
+std::vector<TriangleMesh::Material> GetEffectiveMaterials(const TriangleMesh &mesh) {
+  if (ShouldMakeEffectiveMaterials(mesh)) {
+    return (MakeEffectiveMaterials(mesh.textures_));
+  } else {
+    return (mesh.materials_);
+  }
+}
+
+void MakeEffectiveMaterials(TriangleMesh &mesh) {
+  if (ShouldMakeEffectiveMaterials(mesh)) {
+    mesh.materials_ = MakeEffectiveMaterials(mesh.textures_);
+  }
+}
+
+bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials) {
+  return (std::any_of(materials.begin(), materials.end(),
+                      [&](const TriangleMesh::Material &material) { return (material.gltfExtras.texture_idx == texture); }));
+}
+
+void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage) {
+  const auto old_usage = mesh.GetTriangleUvUsage();
+  assert(old_usage.has_value());
+  if (usage == *old_usage) {
+    return;
+  }
+  switch (usage) {
+    case TriangleMesh::TriangleUvUsage::indices: {
+      auto uv_indices = std::vector<Eigen::Vector3i>();
+      uv_indices.reserve(mesh.triangles_.size());
+      while (uv_indices.size() < mesh.triangles_.size()) {
+        uv_indices.push_back(mesh.GetTriangleUvIndices(uv_indices.size(), *old_usage));
+      }
+      mesh.triangles_uvs_idx_ = std::move(uv_indices);
+      break;
+    }
+    case TriangleMesh::TriangleUvUsage::per_vertex: {
+      ConsolidateTextureCoordinateIndicesWithVertices(mesh);
+      break;
+    }
+    case TriangleMesh::TriangleUvUsage::per_triangle: {
+      auto uvs = std::vector<Eigen::Vector2d>();
+      uvs.reserve(mesh.triangles_.size() * 3u);
+      for (auto triangle = 0u; triangle < mesh.triangles_.size(); ++triangle) {
+        const auto uv_indices = mesh.GetTriangleUvIndices(triangle, *old_usage);
+        for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
+          const auto uvs_index = uv_indices[vertex_in_triangle];
+          if (uvs_index >= 0) {
+            uvs.push_back(mesh.triangle_uvs_[uvs_index]);
+          } else {
+            uvs.push_back(Eigen::Vector2d(0.0, 0.0));
+          }
+        }
+      }
+      assert(uvs.size() == mesh.triangles_.size() * 3u);
+      mesh.triangle_uvs_ = std::move(uvs);
+      mesh.triangles_uvs_idx_.clear();
+      break;
+    }
+  }
 }
 
 }  // namespace open3d::geometry
