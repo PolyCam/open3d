@@ -72,6 +72,7 @@ class TriangleMesh : public MeshBase {
   virtual TriangleMesh &Rotate(const Eigen::Matrix3d &R, const Eigen::Vector3d &center) override;
 
  public:
+  TriangleMesh &Add(const TriangleMesh &mesh, bool update_triangle_material_ids = true);
   TriangleMesh &operator+=(const TriangleMesh &mesh);
   TriangleMesh operator+(const TriangleMesh &mesh) const;
 

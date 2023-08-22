@@ -33,6 +33,7 @@
 #include <filesystem>
 #include <numeric>
 #include <vector>
+#include <iostream>
 
 #include "open3d/geometry/Reorganization.h"
 #include "open3d/io/FileFormatIO.h"
@@ -299,6 +300,104 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 
   const auto node_transforms = GetNodeTransforms(model);
 
+  std::vector<geometry::Image> textures;
+
+  const auto read_material = [&](const tinygltf::Primitive &primitive){
+    if (primitive.material < 0) {
+      auto default_material = geometry::TriangleMesh::Material();
+      default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
+      return default_material;
+    }
+
+    auto material = geometry::TriangleMesh::Material();
+    const tinygltf::Material &gltf_material = model.materials[primitive.material];
+    const auto &color = gltf_material.pbrMetallicRoughness.baseColorFactor;
+    if (color.size() == 4u) {
+      material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(color[0], color[1], color[2], color[3]);
+    }
+    const auto &emissiveFactor = gltf_material.emissiveFactor;
+    if (emissiveFactor.size() == 3u) {
+      material.gltfExtras.emissiveFactor = Eigen::Vector3d(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2]);
+    }
+    material.gltfExtras.doubleSided = gltf_material.doubleSided;
+    material.gltfExtras.alphaMode = gltf_material.alphaMode;
+    material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
+    material.baseMetallic = gltf_material.pbrMetallicRoughness.metallicFactor;
+    material.baseRoughness = gltf_material.pbrMetallicRoughness.roughnessFactor;
+    auto base_texture_idx = std::optional<size_t>();
+    if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
+      base_texture_idx = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
+    } else if (const auto it = gltf_material.extensions.find("KHR_materials_pbrSpecularGlossiness"); it != gltf_material.extensions.end()) {
+      const auto &specularGlossiness = it->second;
+      // Treat the diffuse texture as the base color texture.
+      if (specularGlossiness.Has("diffuseTexture")) {
+        base_texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
+        material.gltfExtras.texture_from_specular_glossiness_diffuse = true;
+      }
+    }
+    if (base_texture_idx.has_value()) {
+      const tinygltf::Texture &gltf_texture = model.textures[base_texture_idx.value()];
+      if (gltf_texture.source >= 0) {
+        const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+        material.gltfExtras.texture_idx = textures.size();
+        textures.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
+      }
+    }
+    if (gltf_material.normalTexture.index >= 0) {
+      const tinygltf::Texture &gltf_texture = model.textures[gltf_material.normalTexture.index];
+      if (gltf_texture.source >= 0) {
+        const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+        material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
+      }
+    }
+    if (gltf_material.occlusionTexture.index >= 0) {
+      const tinygltf::Texture &gltf_texture = model.textures[gltf_material.occlusionTexture.index];
+      if (gltf_texture.source >= 0) {
+        const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+        material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
+      }
+    }
+
+    if (gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
+      const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index];
+      if (gltf_texture.source >= 0) {
+        const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+        material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
+      }
+    }
+
+    // Read any images referenced by extensions.
+    material.gltfExtras.extensions = gltf_material.extensions;
+    for (auto &[extension_name, extension] : material.gltfExtras.extensions) {
+      if (extension.IsObject()) {
+        for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
+          if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+              key == "diffuseTexture") {
+            // Skip diffuse texture if it's already been read as the base color texture.
+            continue;
+          }
+          // Assume anything that has an "index" is a texture. This is true for all the material extensions in
+          // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos.
+          if (value.Has("index")) {
+            auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
+            const auto texture_idx = index_value.GetNumberAsInt();
+            const tinygltf::Texture &gltf_texture = model.textures[texture_idx];
+            if (gltf_texture.source >= 0) {
+              const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+              index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
+              material.gltfExtras.extension_images.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
+            }
+          }
+        }
+      }
+    }
+
+    return material;
+  };
+
+  std::vector<geometry::TriangleMesh::Material> materials;
+  std::unordered_map<int, size_t> gltf_material_to_id;
+
   mesh.Clear();
   geometry::TriangleMesh mesh_temp;
   for (const tinygltf::Node &gltf_node : model.nodes) {
@@ -449,129 +548,42 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
         }
 
         // read texture and material
-        if (primitive.material >= 0) {
-          auto material = geometry::TriangleMesh::Material();
-          const tinygltf::Material &gltf_material = model.materials[primitive.material];
-          const auto &color = gltf_material.pbrMetallicRoughness.baseColorFactor;
-          if (color.size() == 4u) {
-            material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(color[0], color[1], color[2], color[3]);
-          }
-          const auto &emissiveFactor = gltf_material.emissiveFactor;
-          if (emissiveFactor.size() == 3u) {
-            material.gltfExtras.emissiveFactor = Eigen::Vector3d(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2]);
-          }
-          material.gltfExtras.doubleSided = gltf_material.doubleSided;
-          material.gltfExtras.alphaMode = gltf_material.alphaMode;
-          material.gltfExtras.alphaCutoff = gltf_material.alphaCutoff;
-          material.baseMetallic = gltf_material.pbrMetallicRoughness.metallicFactor;
-          material.baseRoughness = gltf_material.pbrMetallicRoughness.roughnessFactor;
-          mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-          auto base_texture_idx = std::optional<size_t>();
-          if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-            base_texture_idx = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
-          } else if (const auto it = gltf_material.extensions.find("KHR_materials_pbrSpecularGlossiness"); it != gltf_material.extensions.end()) {
-            const auto &specularGlossiness = it->second;
-            // Treat the diffuse texture as the base color texture.
-            if (specularGlossiness.Has("diffuseTexture")) {
-              base_texture_idx = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
-              material.gltfExtras.texture_from_specular_glossiness_diffuse = true;
+        size_t material_id;
+        if (auto it = gltf_material_to_id.find(primitive.material); it != gltf_material_to_id.end()) {
+          material_id = it->second;
+        } else {
+          material_id = materials.size();
+          materials.emplace_back(read_material(primitive));
+          gltf_material_to_id[primitive.material] = material_id;
+        }
+        mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), (int)material_id);
+        if (materials[material_id].IsTextured()) {
+          std::vector<Eigen::Vector2d> triangle_uvs_;
+          FOREACH(i, mesh_temp.triangles_) {
+            const Eigen::Vector3i &face = mesh_temp.triangles_[i];
+            for (int v = 0; v < 3; ++v) {
+              mesh_temp.triangles_uvs_idx_[i](v) = triangle_uvs_.size();
+              triangle_uvs_.emplace_back(mesh_temp.triangle_uvs_[face[v]]);
             }
           }
-          if (base_texture_idx.has_value()) {
-            const tinygltf::Texture &gltf_texture = model.textures[base_texture_idx.value()];
-            if (gltf_texture.source >= 0) {
-              const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              material.gltfExtras.texture_idx = mesh_temp.textures_.size();
-              mesh_temp.textures_.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-              std::vector<Eigen::Vector2d> triangle_uvs_;
-              FOREACH(i, mesh_temp.triangles_) {
-                const Eigen::Vector3i &face = mesh_temp.triangles_[i];
-                for (int v = 0; v < 3; ++v) {
-                  mesh_temp.triangles_uvs_idx_[i](v) = triangle_uvs_.size();
-                  triangle_uvs_.emplace_back(mesh_temp.triangle_uvs_[face[v]]);
-                }
-              }
-              mesh_temp.triangle_uvs_ = std::move(triangle_uvs_);
-            }
-          }
-          if (gltf_material.normalTexture.index >= 0) {
-            const tinygltf::Texture &gltf_texture = model.textures[gltf_material.normalTexture.index];
-            if (gltf_texture.source >= 0) {
-              const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.normalMap = std::make_shared<geometry::Image>(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-            }
-          }
-          if (gltf_material.occlusionTexture.index >= 0) {
-            const tinygltf::Texture &gltf_texture = model.textures[gltf_material.occlusionTexture.index];
-            if (gltf_texture.source >= 0) {
-              const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
-            }
-          }
-
-          if (gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
-            const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index];
-            if (gltf_texture.source >= 0) {
-              const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-              assert(!mesh_temp.triangles_.empty() && !mesh_temp.triangle_uvs_.empty());
-              material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
-            }
-          }
-
-          // Read any images referenced by extensions.
-          material.gltfExtras.extensions = gltf_material.extensions;
-          for (auto &[extension_name, extension] : material.gltfExtras.extensions) {
-            if (extension.IsObject()) {
-              for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
-                if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
-                    key == "diffuseTexture") {
-                  // Skip diffuse texture if it's already been read as the base color texture.
-                  continue;
-                }
-                // Assume anything that has an "index" is a texture. This is true for all the material extensions in
-                // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos.
-                if (value.Has("index")) {
-                  auto &index_value = value.Get<tinygltf::Value::Object>()["index"];
-                  const auto texture_idx = index_value.GetNumberAsInt();
-                  const tinygltf::Texture &gltf_texture = model.textures[texture_idx];
-                  if (gltf_texture.source >= 0) {
-                    const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
-                    index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
-                    material.gltfExtras.extension_images.emplace_back(ToOpen3d(gltf_image, texture_load_mode, parent_directory));
-                  }
-                }
-              }
-            }
-          }
-
-          mesh_temp.materials_.push_back(std::move(material));
+          mesh_temp.triangle_uvs_ = std::move(triangle_uvs_);
+        } else {
+          mesh_temp.triangle_uvs_.clear();
+          mesh_temp.triangles_uvs_idx_.clear();
         }
 
+        // apply node transforms
         const auto node_idx = &gltf_node - &model.nodes[0];
         if (node_transforms[node_idx] != Eigen::Matrix4d::Identity()) {
           mesh_temp.Transform(node_transforms[node_idx]);
         }
 
-        // Handle missing or excess materials or attributes.
-        if (mesh_temp.materials_.empty()) {
-          auto default_material = geometry::TriangleMesh::Material();
-          default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
-          mesh_temp.materials_.push_back(default_material);
-        }
-        if (mesh_temp.triangle_material_ids_.empty()) {
-          mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), 0);
-        }
-        if (mesh_temp.textures_.empty()) {
-          mesh_temp.triangle_uvs_.clear();
-          mesh_temp.triangles_uvs_idx_.clear();
-        }
-
-        mesh += mesh_temp;
+        mesh.Add(mesh_temp, false);
       }
     }
   }
+  mesh.materials_ = std::move(materials);
+  mesh.textures_ = std::move(textures);
 
   return true;
 }
@@ -786,7 +798,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     InitializeGltfMaterial(gltfMaterial, mesh);
     gltfPrimitive.material = gltfModel.materials.size();
     if (material.IsTextured()) {
-      if (mesh.HasTriangleUvIndices()) {
+      if (mesh.HasTriangleUvs()) {
         // setup texture coordinates accessor
         gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
         tinygltf::Accessor vertexTexcoordAccessor;
