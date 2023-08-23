@@ -126,7 +126,7 @@ static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &mod
     }
   }
   auto visited = std::vector<bool>(model.nodes.size(), false);
-  std::function<void(size_t, const Eigen::Matrix4d&)> visit = [&](size_t node_idx, const Eigen::Matrix4d &parent_transform) {
+  std::function<void(size_t, const Eigen::Matrix4d &)> visit = [&](size_t node_idx, const Eigen::Matrix4d &parent_transform) {
     if (visited[node_idx]) {
       throw std::runtime_error("Cycle detected in glTF scene graph.");
     }
@@ -298,7 +298,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 
   std::vector<geometry::Image> textures;
 
-  const auto read_material = [&](const tinygltf::Primitive &primitive){
+  const auto read_material = [&](const tinygltf::Primitive &primitive) {
     if (primitive.material < 0) {
       auto default_material = geometry::TriangleMesh::Material();
       default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
@@ -793,25 +793,26 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     tinygltf::Material gltfMaterial;
     InitializeGltfMaterial(gltfMaterial, mesh);
     gltfPrimitive.material = gltfModel.materials.size();
+    gltfMaterial.extensions = material.gltfExtras.extensions;
+    for (const auto &[extension_name, extension] : gltfMaterial.extensions) {
+      extensions_used.insert(extension_name);
+    }
     if (material.IsTextured()) {
-      if (mesh.HasTriangleUvs()) {
-        // setup texture coordinates accessor
-        gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
-        tinygltf::Accessor vertexTexcoordAccessor;
-        vertexTexcoordAccessor.bufferView = gltfModel.bufferViews.size();
-        vertexTexcoordAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-        vertexTexcoordAccessor.count = mesh.triangle_uvs_.size();
-        vertexTexcoordAccessor.type = TINYGLTF_TYPE_VEC2;
-        gltfModel.accessors.emplace_back(std::move(vertexTexcoordAccessor));
-        // setup texture coordinates
-        static_assert(2 * sizeof(double) == sizeof(Eigen::Vector2d), "triangle_uvs_ should be continuous");
-        assert(mesh.vertices_.size() == mesh.triangle_uvs_.size());
-        tinygltf::BufferView vertexTexcoordBufferView;
-        vertexTexcoordBufferView.buffer = gltfModel.buffers.size();
-        extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset,
-                                             vertexTexcoordBufferView.byteLength);
-        gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
-      }
+      // setup texture coordinates accessor
+      gltfPrimitive.attributes["TEXCOORD_0"] = gltfModel.accessors.size();
+      tinygltf::Accessor vertexTexcoordAccessor;
+      vertexTexcoordAccessor.bufferView = gltfModel.bufferViews.size();
+      vertexTexcoordAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+      vertexTexcoordAccessor.count = mesh.triangle_uvs_.size();
+      vertexTexcoordAccessor.type = TINYGLTF_TYPE_VEC2;
+      gltfModel.accessors.emplace_back(std::move(vertexTexcoordAccessor));
+      // setup texture coordinates
+      static_assert(2 * sizeof(double) == sizeof(Eigen::Vector2d), "triangle_uvs_ should be continuous");
+      assert(mesh.vertices_.size() == mesh.triangle_uvs_.size());
+      tinygltf::BufferView vertexTexcoordBufferView;
+      vertexTexcoordBufferView.buffer = gltfModel.buffers.size();
+      extendBufferConvert<Eigen::Vector2f>(mesh.triangle_uvs_, gltfBuffer, vertexTexcoordBufferView.byteOffset, vertexTexcoordBufferView.byteLength);
+      gltfModel.bufferViews.emplace_back(std::move(vertexTexcoordBufferView));
       // setup material
       auto setup_texture = [&](const geometry::Image &image, const std::string &temporary_file_name, auto &texture_info) {
         texture_info.index = gltfModel.textures.size();
@@ -835,9 +836,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       if (material.roughness) {
         setup_texture(*material.roughness, "roughness.jpg", gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture);
       }
-      gltfMaterial.extensions = material.gltfExtras.extensions;
       for (auto &[extension_name, extension] : gltfMaterial.extensions) {
-        extensions_used.insert(extension_name);
         if (extension.IsObject()) {
           for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
             if (value.Has("index")) {
