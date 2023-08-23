@@ -33,7 +33,6 @@
 #include <filesystem>
 #include <numeric>
 #include <vector>
-#include <iostream>
 
 #include "open3d/geometry/Reorganization.h"
 #include "open3d/io/FileFormatIO.h"
@@ -126,20 +125,13 @@ static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &mod
       is_root[child] = false;
     }
   }
-  auto stack = std::vector<size_t>();
-  for (auto i = 0; i < model.nodes.size(); ++i) {
-    if (is_root[i]) {
-      stack.push_back(i);
-    }
-  }
   auto visited = std::vector<bool>(model.nodes.size(), false);
-  while (!stack.empty()) {
-    const auto node_idx = stack.back();
-    stack.pop_back();
+  std::function<void(size_t, const Eigen::Matrix4d&)> visit = [&](size_t node_idx, const Eigen::Matrix4d &parent_transform) {
     if (visited[node_idx]) {
       throw std::runtime_error("Cycle detected in glTF scene graph.");
     }
     visited[node_idx] = true;
+    node_transforms[node_idx] = parent_transform;
     const auto &node = model.nodes[node_idx];
     if (!node.matrix.empty()) {
       std::vector<double> matrix = node.matrix;
@@ -148,13 +140,13 @@ static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &mod
     } else {
       // The specification states that first the scale is
       // applied to the vertices, then the rotation, and then the
-      // translation. Multipy the matrices in the reverse order.
-      if (node.translation.size() > 0) {
+      // translation. Multiply the matrices in the reverse order.
+      if (!node.translation.empty()) {
         Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
         transform.topRightCorner<3, 1>() = Eigen::Vector3d(node.translation[0], node.translation[1], node.translation[2]);
         node_transforms[node_idx] *= transform;
       }
-      if (node.rotation.size() > 0) {
+      if (!node.rotation.empty()) {
         Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
         // glTF represents a quaternion as qx, qy, qz, qw, while
         // Eigen::Quaterniond orders the parameters as qw, qx,
@@ -163,7 +155,7 @@ static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &mod
             Eigen::Quaterniond(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]).toRotationMatrix();
         node_transforms[node_idx] *= transform;
       }
-      if (node.scale.size() > 0) {
+      if (!node.scale.empty()) {
         Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
         transform(0, 0) = node.scale[0];
         transform(1, 1) = node.scale[1];
@@ -172,8 +164,12 @@ static std::vector<Eigen::Matrix4d> GetNodeTransforms(const tinygltf::Model &mod
       }
     }
     for (const auto &child : node.children) {
-      node_transforms[child] = node_transforms[node_idx];
-      stack.push_back(child);
+      visit(child, node_transforms[node_idx]);
+    }
+  };
+  for (auto i = 0; i < model.nodes.size(); ++i) {
+    if (is_root[i]) {
+      visit(i, Eigen::Matrix4d::Identity());
     }
   }
   return (node_transforms);
