@@ -55,6 +55,7 @@ TriangleMesh &TriangleMesh::Clear() {
   triangle_normals_.clear();
   adjacency_list_.clear();
   triangle_uvs_.clear();
+  triangles_uvs_idx_.clear();
   materials_.clear();
   triangle_material_ids_.clear();
   textures_.clear();
@@ -76,13 +77,16 @@ TriangleMesh &TriangleMesh::Rotate(const Eigen::Matrix3d &R, const Eigen::Vector
 }
 
 TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
+  return Add(mesh, true);
+}
+
+TriangleMesh &TriangleMesh::Add(const TriangleMesh &mesh, bool update_triangle_material_ids) {
   if (mesh.IsEmpty())
     return (*this);
   if (IsEmpty()) {
     *this = mesh;
     return (*this);
   }
-  const bool has_textures = mesh.HasTriangleUvs() && mesh.HasTextures() && mesh.HasTriangleMaterialIds();
   const size_t old_vert_num = vertices_.size();
   const size_t old_tri_num = triangles_.size();
   MeshBase::operator+=(mesh);
@@ -104,10 +108,10 @@ TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
     ComputeAdjacencyList();
   }
 
-  int add_triangle_material_ids_ = (int)materials_.size();
-  int add_triangles_uvs_idx_ = triangle_uvs_.size();
+  int add_triangle_material_ids_ = update_triangle_material_ids ? (int)materials_.size() : 0;
+  int add_triangles_uvs_idx_ = (int)triangle_uvs_.size();
   size_t old_tex_num = textures_.size();
-  if (has_textures) {
+  if (mesh.HasTriangleUvs()) {
     size_t old_tri_uv_num = triangle_uvs_.size();
     triangle_uvs_.resize(triangle_uvs_.size() + mesh.triangle_uvs_.size());
     for (size_t i = 0; i < mesh.triangle_uvs_.size(); i++) {
@@ -1582,7 +1586,7 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
 
 bool TriangleMesh::Material::IsTextured() const {
   return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
-          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value());
+          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || !gltfExtras.extension_images.empty());
 }
 
 bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {

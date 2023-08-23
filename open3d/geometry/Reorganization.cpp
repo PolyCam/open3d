@@ -127,7 +127,7 @@ static void ConsolidateTextureCoordinateIndicesWithVertices(TriangleMesh &mesh, 
              ? (texture_coordinates_consolidation->original_to_consolidated_indices_.size() == mesh.triangle_uvs_.size())
              : true);
   assert((texture_coordinates_consolidation != nullptr)
-             ? (texture_coordinates_consolidation->consolidated_to_original_indices_.size() < mesh.triangle_uvs_.size())
+             ? (texture_coordinates_consolidation->consolidated_to_original_indices_.size() <= mesh.triangle_uvs_.size())
              : true);
   auto vertices = std::vector<Eigen::Vector3d>();
   vertices.reserve(mesh.triangles_.size() * 3u);  // Worst case scenario.
