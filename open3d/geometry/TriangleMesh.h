@@ -31,6 +31,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <tiny_gltf.h>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -71,6 +72,7 @@ class TriangleMesh : public MeshBase {
   virtual TriangleMesh &Rotate(const Eigen::Matrix3d &R, const Eigen::Vector3d &center) override;
 
  public:
+  TriangleMesh &Add(const TriangleMesh &mesh, bool update_triangle_material_ids = true);
   TriangleMesh &operator+=(const TriangleMesh &mesh);
   TriangleMesh operator+(const TriangleMesh &mesh) const;
 
@@ -84,7 +86,7 @@ class TriangleMesh : public MeshBase {
   bool HasAdjacencyList() const { return vertices_.size() > 0 && adjacency_list_.size() == vertices_.size(); }
 
   bool HasTriangleUvs() const {
-    return HasTriangles() && (triangle_uvs_.size() == 3 * triangles_.size() || triangle_uvs_.size() == vertices_.size());
+    return HasTriangles() && !triangle_uvs_.empty();
   }
 
   enum class TriangleUvUsage {
@@ -103,7 +105,7 @@ class TriangleMesh : public MeshBase {
       valid_uv = true;
       break;
     }
-    return HasTriangles() && valid_uv && triangles_uvs_idx_.size() == triangles_.size() && !triangle_uvs_.empty();
+    return HasTriangles() && valid_uv && !triangle_uvs_.empty();
   }
 
   bool HasTriangleUvIndices() const { return (!triangles_uvs_idx_.empty()); }
@@ -757,6 +759,10 @@ class TriangleMesh : public MeshBase {
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
       std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
+      // References to textures in extensions are replaced by indexes into extension_images.
+      tinygltf::ExtensionMap extensions;
+      std::vector<Image> extension_images;
+      bool texture_from_specular_glossiness_diffuse = false;
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
