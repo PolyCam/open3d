@@ -353,12 +353,18 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
         material.ambientOcclusion = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
       }
     }
-
     if (gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
       const tinygltf::Texture &gltf_texture = model.textures[gltf_material.pbrMetallicRoughness.metallicRoughnessTexture.index];
       if (gltf_texture.source >= 0) {
         const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
         material.roughness = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
+      }
+    }
+    if (gltf_material.emissiveTexture.index >= 0) {
+      const tinygltf::Texture &gltf_texture = model.textures[gltf_material.emissiveTexture.index];
+      if (gltf_texture.source >= 0) {
+        const tinygltf::Image &gltf_image = model.images[gltf_texture.source];
+        material.gltfExtras.emissiveTexture = std::make_shared<geometry::Image>(std::move(ToOpen3d(gltf_image, texture_load_mode, parent_directory)));
       }
     }
 
@@ -835,6 +841,9 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
       }
       if (material.roughness) {
         setup_texture(*material.roughness, "roughness.jpg", gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture);
+      }
+      if (material.gltfExtras.emissiveTexture) {
+        setup_texture(*material.gltfExtras.emissiveTexture, "emissive.jpg", gltfMaterial.emissiveTexture);
       }
       for (auto &[extension_name, extension] : gltfMaterial.extensions) {
         if (extension.IsObject()) {
