@@ -176,10 +176,9 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     const auto absolute_path = mtl_base_path + relative_path;
     auto image = geometry::Image();
     io::ReadImage(absolute_path, image);
-    if (!image->HasData()) {
+    if (!image.HasData()) {
       return (std::optional<unsigned int>());
     }
-    image = image->FlipVertical();
     const auto texture_index = (unsigned int)textures.size();
     already_loaded_textures.insert(std::make_pair(relative_path, texture_index));
     const auto texture_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(relative_path));
@@ -447,7 +446,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
     auto write_texture = [&](unsigned int texture_index) {
       if (!IsTextureInUse(texture_index, effective_materials))
-        continue;
+        return;
       std::string tex_name = get_texture_name(texture_index);
       std::string tex_filename = parent_dir + tex_name + texture_extension;
 
