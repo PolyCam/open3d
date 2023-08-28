@@ -165,7 +165,7 @@ TriangleMesh &TriangleMesh::Add(const TriangleMesh &mesh, bool update_triangle_m
     update_texture_index(materials_.back().gltfExtras.emissiveTexture);
     update_texture_index(materials_.back().gltfExtras.texture_idx);
     for (auto &extension_image : materials_.back().gltfExtras.extension_images) {
-      update_texture_index(extension_image);
+      extension_image += old_tex_num;
     }
   }
 
