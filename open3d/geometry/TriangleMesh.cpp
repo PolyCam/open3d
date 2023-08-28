@@ -145,12 +145,27 @@ TriangleMesh &TriangleMesh::Add(const TriangleMesh &mesh, bool update_triangle_m
     }
   }
 
+  auto update_texture_index = [old_tex_num](std::optional<unsigned int> &texture_index) {
+    if (texture_index.has_value()) {
+      *texture_index += old_tex_num;
+    }
+  };
   materials_.reserve(materials_.size() + mesh.materials_.size());
   for (const auto &material : mesh.materials_) {
     materials_.push_back(material);
-    auto &texture_idx = materials_.back().gltfExtras.texture_idx;
-    if (texture_idx.has_value()) {
-      *texture_idx += old_tex_num;
+    update_texture_index(materials_.back().albedo);
+    update_texture_index(materials_.back().normalMap);
+    update_texture_index(materials_.back().ambientOcclusion);
+    update_texture_index(materials_.back().metallic);
+    update_texture_index(materials_.back().roughness);
+    update_texture_index(materials_.back().reflectance);
+    update_texture_index(materials_.back().clearCoat);
+    update_texture_index(materials_.back().clearCoatRoughness);
+    update_texture_index(materials_.back().anisotropy);
+    update_texture_index(materials_.back().gltfExtras.emissiveTexture);
+    update_texture_index(materials_.back().gltfExtras.texture_idx);
+    for (auto &extension_image : materials_.back().extension_images) {
+      update_texture_index(extension_image)
     }
   }
 
@@ -1623,6 +1638,16 @@ bool TriangleMesh::Material::GltfExtras::operator<(const GltfExtras &other) cons
   if (texture_idx != other.texture_idx) {
     return (texture_idx < other.texture_idx);
   }
+  if (extensions != other.extensions) {
+    return (extensions < other.extensions);
+  }
+  if (extension_images != other.extension_images) {
+    return (extension_images < other.extension_images);
+  }
+  if (texture_from_specular_glossiness_diffuse != other.texture_from_specular_glossiness_diffuse) {
+    return (texture_from_specular_glossiness_diffuse < other.texture_from_specular_glossiness_diffuse);
+  }
+
   return (false);
 }
 
@@ -1638,11 +1663,10 @@ bool TriangleMesh::Material::operator<(const Material &other) const {
 bool TriangleMesh::Material::IsEqualIgnoringName(const Material &other) const {
   return (baseColor == other.baseColor && gltfExtras == other.gltfExtras && baseMetallic == other.baseMetallic &&
           baseRoughness == other.baseRoughness && baseReflectance == other.baseReflectance && baseClearCoat == other.baseClearCoat &&
-          baseClearCoatRoughness == other.baseClearCoatRoughness && baseAnisotropy == other.baseAnisotropy && albedo.get() == other.albedo.get() &&
-          normalMap.get() == other.normalMap.get() && ambientOcclusion.get() == other.ambientOcclusion.get() &&
-          metallic.get() == other.metallic.get() && roughness.get() == other.roughness.get() && reflectance.get() == other.reflectance.get() &&
-          clearCoat.get() == other.clearCoat.get() && clearCoatRoughness.get() == other.clearCoatRoughness.get() &&
-          anisotropy.get() == other.anisotropy.get());
+          baseClearCoatRoughness == other.baseClearCoatRoughness && baseAnisotropy == other.baseAnisotropy && albedo == other.albedo &&
+          normalMap == other.normalMap && ambientOcclusion == other.ambientOcclusion && metallic == other.metallic && roughness == other.roughness &&
+          reflectance == other.reflectance && clearCoat == other.clearCoat && clearCoatRoughness == other.clearCoatRoughness &&
+          anisotropy == other.anisotropy.get());
 }
 
 bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
@@ -1671,32 +1695,32 @@ bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
     return (baseAnisotropy < other.baseAnisotropy);
   }
 
-  if (albedo.get() != other.albedo.get()) {
-    return (albedo.get() < other.albedo.get());
+  if (albedo != other.albedo.get()) {
+    return (albedo < other.albedo.get());
   }
-  if (normalMap.get() != other.normalMap.get()) {
-    return (normalMap.get() < other.normalMap.get());
+  if (normalMap != other.normalMap.get()) {
+    return (normalMap < other.normalMap.get());
   }
-  if (ambientOcclusion.get() != other.ambientOcclusion.get()) {
-    return (ambientOcclusion.get() < other.ambientOcclusion.get());
+  if (ambientOcclusion != other.ambientOcclusion.get()) {
+    return (ambientOcclusion < other.ambientOcclusion.get());
   }
-  if (metallic.get() != other.metallic.get()) {
-    return (metallic.get() < other.metallic.get());
+  if (metallic != other.metallic.get()) {
+    return (metallic < other.metallic.get());
   }
-  if (roughness.get() != other.roughness.get()) {
-    return (roughness.get() < other.roughness.get());
+  if (roughness != other.roughness.get()) {
+    return (roughness < other.roughness.get());
   }
-  if (reflectance.get() != other.reflectance.get()) {
-    return (reflectance.get() < other.reflectance.get());
+  if (reflectance != other.reflectance.get()) {
+    return (reflectance < other.reflectance.get());
   }
-  if (clearCoat.get() != other.clearCoat.get()) {
-    return (clearCoat.get() < other.clearCoat.get());
+  if (clearCoat != other.clearCoat.get()) {
+    return (clearCoat < other.clearCoat.get());
   }
-  if (clearCoatRoughness.get() != other.clearCoatRoughness.get()) {
-    return (clearCoatRoughness.get() < other.clearCoatRoughness.get());
+  if (clearCoatRoughness != other.clearCoatRoughness.get()) {
+    return (clearCoatRoughness < other.clearCoatRoughness.get());
   }
-  if (anisotropy.get() != other.anisotropy.get()) {
-    return (anisotropy.get() < other.anisotropy.get());
+  if (anisotropy != other.anisotropy.get()) {
+    return (anisotropy < other.anisotropy.get());
   }
   return (false);
 }

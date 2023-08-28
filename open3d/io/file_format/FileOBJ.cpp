@@ -1,3 +1,5 @@
+#if false
+
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
@@ -492,3 +494,5 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
 }  // namespace io
 }  // namespace open3d
+
+#endif

@@ -1,3 +1,5 @@
+#if false
+
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
@@ -1328,3 +1330,5 @@ bool WriteTriangleMeshToGLTF(const std::string &filename, const geometry::Triang
 
 }  // namespace io
 }  // namespace open3d
+
+#endif
