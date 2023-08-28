@@ -173,7 +173,7 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     if (already_loaded_texture != already_loaded_textures.end()) {
       return (std::make_optional(already_loaded_texture->second));
     }
-    const auto absolute_path = mtl_base_path + relativePath;
+    const auto absolute_path = mtl_base_path + relative_path;
     auto image = io::CreateImageFromFile(absolute_path);
     if (!image->HasData()) {
       return (std::optional<unsigned int>());
@@ -181,7 +181,7 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     image = image->FlipVertical();
     const auto texture_index = (unsigned int)textures.size();
     already_loaded_textures.insert(std::make_pair(relative_path, texture_index));
-    const auto texture_name = GetFileNameWithoutExtension(GetFileNameWithoutDirectory(relative_path));
+    const auto texture_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(relative_path));
     textures.push_back(std::make_pair(texture_name, std::move(image)));
     return (std::make_optional(texture_index));
   };
@@ -225,9 +225,9 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
   }
 
   mesh.textures_.reserve(textures.size());
-  mesh.texture_names_.reserve(textures.size()) for (auto &texture : textures) {
+  mesh.textures_names_.reserve(textures.size()); for (auto &texture : textures) {
     mesh.textures_.push_back(std::move(texture.second));
-    mesh.texture_names_.push_back(std::move(texture.first));
+    mesh.textures_names_.push_back(std::move(texture.first));
   }
 
   return true;
@@ -239,12 +239,12 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
   const auto timer_start = std::chrono::high_resolution_clock::now();
   std::string object_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(filename));
   const auto has_texture_names =
-      (mesh.texture_names_.size() == mesh.textures_.size() && !mesh.texture_names_.empty() &&
-       std::none_of(mesh.texture_names_.begin(), mesh.texture_names_.end(), [](const std::string &texture_name) { return (texture_name.empty()); }));
+      (mesh.textures_names_.size() == mesh.textures_.size() && !mesh.textures_names_.empty() &&
+       std::none_of(mesh.textures_names_.begin(), mesh.textures_names_.end(), [](const std::string &texture_name) { return (texture_name.empty()); }));
   const auto texture_extension = ".jpg";
   const auto random_postfix = random_string(8);
-  const auto get_texture_name = [&](unsigned int texture) {
-    return (has_texture_names ? mesh.texture_names_[texture_index] : object_name + '_' + std::to_string(texture_index) + '_' + random_postfix);
+  const auto get_texture_name = [&](unsigned int texture_index) {
+    return (has_texture_names ? mesh.textures_names_[texture_index] : object_name + '_' + std::to_string(texture_index) + '_' + random_postfix);
   };
   std::string object_name_prefix = object_name + '_';
   const auto triangle_uv_usage = mesh.GetTriangleUvUsage();
