@@ -415,11 +415,6 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
 
     // Add the material.
     single_material_mesh.materials_.push_back(material);
-    if (material.gltfExtras.texture_idx.has_value()) {
-      assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
-      single_material_mesh.materials_.begin()->gltfExtras.texture_idx = 0u;
-      single_material_mesh.textures_.push_back(mesh.textures_[*material.gltfExtras.texture_idx]);
-    }
 
     single_material_meshes.push_back(std::move(single_material_mesh));
   }
