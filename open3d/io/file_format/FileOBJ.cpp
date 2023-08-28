@@ -1,5 +1,3 @@
-#if false
-
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
@@ -31,9 +29,12 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <list>
+#include <map>
 #include <numeric>
 #include <optional>
 #include <random>
+#include <utility>
 #include <vector>
 
 #include "open3d/geometry/Reorganization.h"
@@ -162,9 +163,27 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     mesh.triangle_uvs_.clear();
   }
 
-  auto textureLoader = [&mtl_base_path](std::string &relativePath) {
-    auto image = io::CreateImageFromFile(mtl_base_path + relativePath);
-    return image->HasData() ? image : std::shared_ptr<geometry::Image>();
+  auto textures = std::list<std::pair<std::string, geometry::Image>>();
+  auto already_loaded_textures = std::map<std::string /* relative path */, unsigned int /* index into geometry::TriangleMesh::textures_ */>();
+  auto reference_texture = [&](const std::string &relative_path) {
+    if (relative_path.empty()) {
+      return (std::optional<unsigned int>());
+    }
+    const auto already_loaded_texture = already_loaded_textures.find(relative_path);
+    if (already_loaded_texture != already_loaded_textures.end()) {
+      return (std::make_optional(already_loaded_texture->second));
+    }
+    const auto absolute_path = mtl_base_path + relativePath;
+    auto image = io::CreateImageFromFile(absolute_path);
+    if (!image->HasData()) {
+      return (std::optional<unsigned int>());
+    }
+    image = image->FlipVertical();
+    const auto texture_index = (unsigned int)textures.size();
+    already_loaded_textures.insert(std::make_pair(relative_path, texture_index));
+    const auto texture_name = GetFileNameWithoutExtension(GetFileNameWithoutDirectory(relative_path));
+    textures.push_back(std::make_pair(texture_name, std::move(image)));
+    return (std::make_optional(texture_index));
   };
 
   using MaterialParameter = geometry::TriangleMesh::Material::MaterialParameter;
@@ -174,41 +193,12 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     auto meshMaterial = geometry::TriangleMesh::Material();
 
     meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
-
-    if (!material.normal_texname.empty()) {
-      meshMaterial.normalMap = textureLoader(material.normal_texname)->FlipVertical();
-    } else if (!material.bump_texname.empty()) {
-      // try bump, because there is often a misunderstanding of
-      // what bump map or normal map is
-      meshMaterial.normalMap = textureLoader(material.bump_texname)->FlipVertical();
-    }
-
-    if (!material.ambient_occlusion_texname.empty()) {
-      meshMaterial.ambientOcclusion = textureLoader(material.ambient_occlusion_texname)->FlipVertical();
-    }
-
-    if (!material.diffuse_texname.empty()) {
-      meshMaterial.albedo = textureLoader(material.diffuse_texname)->FlipVertical();
-      mesh.textures_names_.push_back(material.diffuse_texname);
-
-      // Legacy texture map support
-      if (meshMaterial.albedo) {
-        mesh.textures_.push_back(*meshMaterial.albedo);
-      }
-    }
-
-    if (!material.metallic_texname.empty()) {
-      meshMaterial.metallic = textureLoader(material.metallic_texname);
-    }
-
-    if (!material.roughness_texname.empty()) {
-      meshMaterial.roughness = textureLoader(material.roughness_texname)->FlipVertical();
-      std::cout << "Loaded roughness from OBJ file " << std::endl;
-    }
-
-    if (!material.sheen_texname.empty()) {
-      meshMaterial.reflectance = textureLoader(material.sheen_texname);
-    }
+    meshMaterial.normalMap = reference_texture(material.normal_texname.empty() ? material.bump_texname : material.normal_texname);
+    meshMaterial.ambientOcclusion = reference_texture(material.ambient_occlusion_texname);
+    meshMaterial.gltfExtras.texture_idx = reference_texture(material.diffuse_texname);
+    meshMaterial.metallic = reference_texture(material.metallic_texname);
+    meshMaterial.roughness = reference_texture(material.roughness_texname);
+    meshMaterial.reflectance = reference_texture(material.sheen_texname);
 
     // NOTE: We want defaults of 0.0 and 1.0 for baseMetallic and
     // baseRoughness respectively but 0.0 is a valid value for both and
@@ -234,6 +224,12 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     mesh.materials_.push_back(std::move(meshMaterial));
   }
 
+  mesh.textures_.reserve(textures.size());
+  mesh.texture_names_.reserve(textures.size()) for (auto &texture : textures) {
+    mesh.textures_.push_back(std::move(texture.second));
+    mesh.texture_names_.push_back(std::move(texture.first));
+  }
+
   return true;
 }
 
@@ -242,6 +238,14 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
                             bool write_triangle_uvs /* = true*/, bool print_progress) {
   const auto timer_start = std::chrono::high_resolution_clock::now();
   std::string object_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(filename));
+  const auto has_texture_names =
+      (mesh.texture_names_.size() == mesh.textures_.size() && !mesh.texture_names_.empty() &&
+       std::none_of(mesh.texture_names_.begin(), mesh.texture_names_.end(), [](const std::string &texture_name) { return (texture_name.empty()); }));
+  const auto texture_extension = ".jpg";
+  const auto random_postfix = random_string(8);
+  const auto get_texture_name = [&](unsigned int texture) {
+    return (has_texture_names ? mesh.texture_names_[texture_index] : object_name + '_' + std::to_string(texture_index) + '_' + random_postfix);
+  };
   std::string object_name_prefix = object_name + '_';
   const auto triangle_uv_usage = mesh.GetTriangleUvUsage();
   auto effective_materials = GetEffectiveMaterials(mesh);
@@ -391,19 +395,19 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       return true;
     }
 
-    bool add_random_postfix = true;
-    std::string material_postfix = ".jpg";
-    if (add_random_postfix) {
-      material_postfix = "_" + random_string(8) + ".jpg";
-    }
-
     mtl_file << "# Created by Polycam\n";
     mtl_file << "# object name: " << object_name << "\n";
+    auto write_texture_reference_if_needed = [&](const std::optional<unsigned int> &texture, const char *mtl_key) {
+      if (!texture.has_value()) {
+        return;
+      }
+      mtl_file << mtl_key << ' ' << get_texture_name(*texture) << texture_extension << '\n';
+    };
     auto add_material = [&](const geometry::TriangleMesh::Material &material) {
       const auto &mtl_name = *material.name;
       std::optional<unsigned int> texture_idx = material.gltfExtras.texture_idx;
       std::string tex_name = object_name + "_" + (texture_idx.has_value() ? std::to_string(*texture_idx) : (std::string) "-1");
-      if (!texture_idx.has_value()) {  // Solid color - not a texture
+      if (!material.IsTextured()) {  // Solid color - not a texture
         const auto &spectral = material.gltfExtras.emissiveFactor;
         mtl_file << "newmtl " << mtl_name << "\n";
         mtl_file << "Ka 0.000 0.000 0.000\n";
@@ -423,13 +427,10 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
         mtl_file << "Tr 0.000000\n";
         mtl_file << "illum 1\n";
         mtl_file << "Ns 1.000000\n";
-        mtl_file << "map_Kd " << tex_name << material_postfix << "\n";
-        if (material.normalMap)
-          mtl_file << "normal " << mtl_name << "_norm" << material_postfix << "\n";
-        if (material.ambientOcclusion)
-          mtl_file << "map_ao " << mtl_name << "_occl" << material_postfix << "\n";
-        if (material.roughness)
-          mtl_file << "map_Pr " << mtl_name << "_roughness" << material_postfix << "\n";
+        write_texture_reference_if_needed(material.gltfExtras.texture_idx, "map_Kd");
+        write_texture_reference_if_needed(material.normalMap, "normal");
+        write_texture_reference_if_needed(material.ambientOcclusion, "map_ao");
+        write_texture_reference_if_needed(material.roughness, "map_Pr");
       }
     };
     for (auto material_index = 0u; material_index < effective_materials.size(); ++material_index) {
@@ -442,40 +443,16 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       add_material(default_material);
     }
 
-    // write textures (if existing)
-    auto write_texture = [&](size_t i) {
-      // Don't write images for which no face was seen.
-      if (!IsTextureInUse(i, effective_materials))
-        return;
-      std::string tex_name = object_name + "_" + std::to_string(i);
-      std::string tex_filename = parent_dir + tex_name + material_postfix;
+    for (auto texture_index = 0u; texture_index < mesh.textures_.size(); ++texture_index) {
+      if (!IsTextureInUse(texture_index, effective_materials))
+        continue;
+      std::string tex_name = get_texture_name(texture_index);
+      std::string tex_filename = parent_dir + tex_name + texture_extension;
 
-      if (!io::WriteImage(tex_filename, mesh.textures_[i])) {
+      if (!io::WriteImage(tex_filename, mesh.textures_[texture_index])) {
         utility::LogWarning("Write OBJ successful, but failed to write texture file.");
       }
-
-      if (i < effective_materials.size()) {
-        const geometry::TriangleMesh::Material &material = effective_materials[i];
-        if (material.normalMap) {
-          std::string tex_filename = parent_dir + tex_name + "_norm" + material_postfix;
-          if (!io::WriteImage(tex_filename, *material.normalMap)) {
-            utility::LogWarning("Write OBJ successful, but failed to write texture file.");
-          }
-        }
-        if (material.ambientOcclusion) {
-          std::string tex_filename = parent_dir + tex_name + "_occl" + material_postfix;
-          if (!io::WriteImage(tex_filename, *material.ambientOcclusion)) {
-            utility::LogWarning("Write OBJ successful, but failed to write AO file.");
-          }
-        }
-        if (material.roughness) {
-          std::string tex_filename = parent_dir + tex_name + "_roughness" + material_postfix;
-          if (!io::WriteImage(tex_filename, *material.roughness)) {
-            utility::LogWarning("Write OBJ successful, but failed to write roughness map.");
-          }
-        }
-      }
-    };
+    }
 
 #ifdef USE_MULTITHREADING
     utility::Parallelize(write_texture, mesh.textures_.size());
@@ -494,5 +471,3 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
 
 }  // namespace io
 }  // namespace open3d
-
-#endif

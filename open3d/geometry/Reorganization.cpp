@@ -463,8 +463,14 @@ void MakeEffectiveMaterials(TriangleMesh &mesh) {
 }
 
 bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials) {
-  return (std::any_of(materials.begin(), materials.end(),
-                      [&](const TriangleMesh::Material &material) { return (material.gltfExtras.texture_idx == texture); }));
+  return (std::any_of(materials.begin(), materials.end(), [&](const TriangleMesh::Material &material) {
+    return (material.gltfExtras.texture_idx == texture || material.albedo == texture || material.normalMap == texture ||
+            material.ambientOcclusion == texture || material.metallic == texture || material.roughness == texture ||
+            material.reflectance == texture || material.clearCoat == texture || material.clearCoatRoughness == texture ||
+            material.anisotropy == texture || material.gltfExtras.emissiveTexture == texture ||
+            std::find(material.gltfExtras.extension_images.begin(), material.gltfExtras.extension_images.end(), texture) !=
+                material.gltfExtras.extension_images.end());
+  }));
 }
 
 void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage) {
