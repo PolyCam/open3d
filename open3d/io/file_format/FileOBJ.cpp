@@ -174,7 +174,8 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
       return (std::make_optional(already_loaded_texture->second));
     }
     const auto absolute_path = mtl_base_path + relative_path;
-    auto image = io::CreateImageFromFile(absolute_path);
+    auto image = geometry::Image();
+    io::ReadImage(absolute_path, image);
     if (!image->HasData()) {
       return (std::optional<unsigned int>());
     }
@@ -225,7 +226,8 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
   }
 
   mesh.textures_.reserve(textures.size());
-  mesh.textures_names_.reserve(textures.size()); for (auto &texture : textures) {
+  mesh.textures_names_.reserve(textures.size());
+  for (auto &texture : textures) {
     mesh.textures_.push_back(std::move(texture.second));
     mesh.textures_names_.push_back(std::move(texture.first));
   }
@@ -238,9 +240,9 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
                             bool write_triangle_uvs /* = true*/, bool print_progress) {
   const auto timer_start = std::chrono::high_resolution_clock::now();
   std::string object_name = utility::filesystem::GetFileNameWithoutExtension(utility::filesystem::GetFileNameWithoutDirectory(filename));
-  const auto has_texture_names =
-      (mesh.textures_names_.size() == mesh.textures_.size() && !mesh.textures_names_.empty() &&
-       std::none_of(mesh.textures_names_.begin(), mesh.textures_names_.end(), [](const std::string &texture_name) { return (texture_name.empty()); }));
+  const auto has_texture_names = (mesh.textures_names_.size() == mesh.textures_.size() && !mesh.textures_names_.empty() &&
+                                  std::none_of(mesh.textures_names_.begin(), mesh.textures_names_.end(),
+                                               [](const std::string &texture_name) { return (texture_name.empty()); }));
   const auto texture_extension = ".jpg";
   const auto random_postfix = random_string(8);
   const auto get_texture_name = [&](unsigned int texture_index) {
@@ -443,7 +445,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       add_material(default_material);
     }
 
-    for (auto texture_index = 0u; texture_index < mesh.textures_.size(); ++texture_index) {
+    auto write_texture = [&](unsigned int texture_index) {
       if (!IsTextureInUse(texture_index, effective_materials))
         continue;
       std::string tex_name = get_texture_name(texture_index);
@@ -452,7 +454,7 @@ bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::Triangl
       if (!io::WriteImage(tex_filename, mesh.textures_[texture_index])) {
         utility::LogWarning("Write OBJ successful, but failed to write texture file.");
       }
-    }
+    };
 
 #ifdef USE_MULTITHREADING
     utility::Parallelize(write_texture, mesh.textures_.size());
