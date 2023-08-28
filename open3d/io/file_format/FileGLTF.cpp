@@ -299,7 +299,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
   std::vector<geometry::Image> textures;
   textures.reserve(model.images.size());
   while (textures.size() < model.images.size()) {
-    textures.emplace_back(ToOpen3d(model.images[textures.size()], texture_load_mode, parent_directory))
+    textures.emplace_back(ToOpen3d(model.images[textures.size()], texture_load_mode, parent_directory));
   }
   auto reference_texture_if_needed = [&model](std::optional<unsigned int> &open3d_texture, const auto &tiny_gltf_texture) {
     if (tiny_gltf_texture.index >= 0) {
@@ -664,13 +664,14 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   tinygltf::Mesh gltfMesh;
   tinygltf::Buffer gltfBuffer;
 
-  if (mesh.HasTextures()) {
+  if (_mesh.HasTextures()) {
     const auto parent_directory = std::filesystem::path(fileName).parent_path();
     const auto assets_relative_directory = std::filesystem::path("assets");
     const auto assets_directory = parent_directory / assets_relative_directory;
     std::filesystem::create_directories(assets_directory);
-    for (auto texture_index = 0u; texture_index < mesh.textures_.size(); ++texture_index) {
-      const auto &image = mesh.textures_[texture_index];
+    const auto texture_base_name = utility::filesystem::GetFileNameWithoutExtension(fileName);
+    for (auto texture_index = 0u; texture_index < _mesh.textures_.size(); ++texture_index) {
+      const auto &image = _mesh.textures_[texture_index];
       auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
       if (skipped_external_texture.has_value()) {
         gltfModel.images.push_back(std::move(*skipped_external_texture));
@@ -687,17 +688,12 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
           gltfModel.images.emplace_back(std::move(gltf_image));
         } else {
-          const auto texture_base_name = utility::filesystem::GetFileNameWithoutExtension(temporary_file_name);
           const auto texture_name = texture_base_name + '_' + std::to_string(texture_index);
           gltf_image.name = texture_name;
           const auto relative_texture_file =
               assets_relative_directory / std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
           const auto texture_file = parent_directory / relative_texture_file;
           gltf_image.uri = relative_texture_file.string();
-          if (!created_assets_directory) {
-            std::filesystem::create_directories(assets_directory);
-            created_assets_directory = true;
-          }
           std::filesystem::remove(texture_file);
           WriteFileFromBuffer(texture_file.string(), encoded_data.data_);
           gltfModel.images.emplace_back(std::move(gltf_image));
