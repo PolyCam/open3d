@@ -143,7 +143,7 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
         if (!attrib.texcoords.empty() && 2 * idx.texcoord_index + 1 < int(attrib.texcoords.size())) {
           tinyobj::real_t tx = attrib.texcoords[2 * idx.texcoord_index + 0];
           tinyobj::real_t ty = attrib.texcoords[2 * idx.texcoord_index + 1];
-          mesh.triangle_uvs_.push_back(Eigen::Vector2d(tx, ty));
+          mesh.triangle_uvs_.push_back(Eigen::Vector2d(tx, 1.0f - ty));
         }
       }
       mesh.triangles_.push_back(facet);
