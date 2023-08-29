@@ -670,6 +670,8 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     const auto assets_directory = parent_directory / assets_relative_directory;
     std::filesystem::create_directories(assets_directory);
     const auto texture_base_name = utility::filesystem::GetFileNameWithoutExtension(fileName);
+    gltfModel.images.reserve(_mesh.textures_.size());
+    gltfModel.textures.reserve(_mesh.textures_.size());
     for (auto texture_index = 0u; texture_index < _mesh.textures_.size(); ++texture_index) {
       const auto &image = _mesh.textures_[texture_index];
       auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
@@ -699,6 +701,9 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           gltfModel.images.emplace_back(std::move(gltf_image));
         }
       }
+      tinygltf::Texture gltf_texture;
+      gltf_texture.source = gltfModel.textures.size();
+      gltfModel.textures.emplace_back(std::move(gltf_texture));
     }
   }
 
@@ -798,6 +803,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           texture_info.texCoord = 0;
         }
       };
+
       setup_texture_if_needed(material.gltfExtras.texture_idx.has_value() ? material.gltfExtras.texture_idx : material.albedo,
                               gltfMaterial.pbrMetallicRoughness.baseColorTexture);
       setup_texture_if_needed(material.normalMap, gltfMaterial.normalTexture);
