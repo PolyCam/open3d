@@ -665,11 +665,12 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
   tinygltf::Buffer gltfBuffer;
 
   if (_mesh.HasTextures()) {
-    const auto parent_directory = std::filesystem::path(fileName).parent_path();
+    const auto file_path = std::filesystem::path(fileName);
+    const auto parent_directory = file_path.parent_path();
     const auto assets_relative_directory = std::filesystem::path("assets");
     const auto assets_directory = parent_directory / assets_relative_directory;
     std::filesystem::create_directories(assets_directory);
-    const auto texture_base_name = utility::filesystem::GetFileNameWithoutExtension(fileName);
+    const auto texture_base_name = file_path.stem().string();
     gltfModel.images.reserve(_mesh.textures_.size());
     gltfModel.textures.reserve(_mesh.textures_.size());
     for (auto texture_index = 0u; texture_index < _mesh.textures_.size(); ++texture_index) {
