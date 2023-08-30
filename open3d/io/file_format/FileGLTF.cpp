@@ -668,8 +668,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     const auto file_path = std::filesystem::path(fileName);
     const auto parent_directory = file_path.parent_path();
     const auto assets_relative_directory = std::filesystem::path("assets");
-    const auto assets_directory = parent_directory / assets_relative_directory;
-    std::filesystem::create_directories(assets_directory);
+    auto created_assets_directory = false;
     const auto texture_base_name = file_path.stem().string();
     gltfModel.images.reserve(_mesh.textures_.size());
     gltfModel.textures.reserve(_mesh.textures_.size());
@@ -691,6 +690,11 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
         if (skipped_external_texture.has_value()) {
           gltfModel.images.push_back(std::move(*skipped_external_texture));
         } else {
+          if (!created_assets_directory) {
+            const auto assets_directory = parent_directory / assets_relative_directory;
+            std::filesystem::create_directories(assets_directory);
+            created_assets_directory = true;
+          }
           const auto texture_name = texture_base_name + '_' + std::to_string(texture_index);
           tinygltf::Image gltf_image;
           gltf_image.name = texture_name;
