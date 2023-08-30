@@ -695,7 +695,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           tinygltf::Image gltf_image;
           gltf_image.name = texture_name;
           const auto *encoded_data = image.pass_through_.has_value() ? std::get_if<geometry::Image::EncodedData>(&*image.pass_through_)
-                                                                     : (const std::filesystem::path *)nullptr;
+                                                                     : (const geometry::Image::EncodedData *)nullptr;
           const auto mime_type = ((encoded_data != nullptr) ? encoded_data->mime_type_.c_str() : "image/jpeg");
           gltf_image.mimeType = mime_type;
           const auto relative_texture_file =
