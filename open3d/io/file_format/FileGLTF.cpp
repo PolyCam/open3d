@@ -675,30 +675,39 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     gltfModel.textures.reserve(_mesh.textures_.size());
     for (auto texture_index = 0u; texture_index < _mesh.textures_.size(); ++texture_index) {
       const auto &image = _mesh.textures_[texture_index];
-      auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
-      if (skipped_external_texture.has_value()) {
-        gltfModel.images.push_back(std::move(*skipped_external_texture));
-      } else {
+      if (bBinary) {
         const auto encoded_data = EncodeImage(image, path + "Temp.jpg");
         tinygltf::Image gltf_image;
         gltf_image.mimeType = encoded_data.mime_type_;
-        if (bBinary) {
-          gltf_image.bufferView = gltfModel.bufferViews.size();
-          gltf_image.as_is = true;
-          tinygltf::BufferView imageBufferView;
-          imageBufferView.buffer = gltfModel.buffers.size();
-          extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
-          gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
-          gltfModel.images.emplace_back(std::move(gltf_image));
+        gltf_image.bufferView = gltfModel.bufferViews.size();
+        gltf_image.as_is = true;
+        tinygltf::BufferView imageBufferView;
+        imageBufferView.buffer = gltfModel.buffers.size();
+        extendBuffer(encoded_data.data_, gltfBuffer, imageBufferView.byteOffset, imageBufferView.byteLength);
+        gltfModel.bufferViews.emplace_back(std::move(imageBufferView));
+        gltfModel.images.emplace_back(std::move(gltf_image));
+      } else {
+        auto skipped_external_texture = TrySkippedExternalTexture(image, parent_directory);
+        if (skipped_external_texture.has_value()) {
+          gltfModel.images.push_back(std::move(*skipped_external_texture));
         } else {
           const auto texture_name = texture_base_name + '_' + std::to_string(texture_index);
+          tinygltf::Image gltf_image;
           gltf_image.name = texture_name;
+          const auto *encoded_data =
+              image.pass_through_.has_value() ? std::get_if<std::filesystem::path>(&*image.pass_through_) : (const std::filesystem::path *)nullptr;
+          const auto mime_type = ((encoded_data != nullptr) ? encoded_data->mime_type_.c_str() : "image/jpeg");
+          gltf_image.mimeType = mime_type;
           const auto relative_texture_file =
-              assets_relative_directory / std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(encoded_data.mime_type_));
+              assets_relative_directory / std::filesystem::path(texture_name + '.' + utility::filesystem::GetExtension(mime_type));
           const auto texture_file = parent_directory / relative_texture_file;
           gltf_image.uri = relative_texture_file.string();
           std::filesystem::remove(texture_file);
-          WriteFileFromBuffer(texture_file.string(), encoded_data.data_);
+          if (encoded_data != nullptr) {
+            WriteFileFromBuffer(texture_file.string(), encoded_data->data_);
+          } else {
+            io::WriteImage(texture_file.string(), image);
+          }
           gltfModel.images.emplace_back(std::move(gltf_image));
         }
       }
