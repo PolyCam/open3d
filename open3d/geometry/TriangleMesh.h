@@ -85,9 +85,7 @@ class TriangleMesh : public MeshBase {
   /// Returns `true` if the mesh contains adjacency normals.
   bool HasAdjacencyList() const { return vertices_.size() > 0 && adjacency_list_.size() == vertices_.size(); }
 
-  bool HasTriangleUvs() const {
-    return HasTriangles() && !triangle_uvs_.empty();
-  }
+  bool HasTriangleUvs() const { return HasTriangles() && !triangle_uvs_.empty(); }
 
   enum class TriangleUvUsage {
     indices,      // Use triangles_uvs_idx_.
@@ -758,6 +756,7 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
+      std::shared_ptr<Image> emissiveTexture;
       std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
       // References to textures in extensions are replaced by indexes into extension_images.
       tinygltf::ExtensionMap extensions;
@@ -766,7 +765,7 @@ class TriangleMesh : public MeshBase {
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
-                emissiveFactor == other.emissiveFactor && texture_idx == other.texture_idx);
+                emissiveFactor == other.emissiveFactor && emissiveTexture == other.emissiveTexture && texture_idx == other.texture_idx);
       }
 
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }

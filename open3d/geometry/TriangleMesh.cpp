@@ -76,9 +76,7 @@ TriangleMesh &TriangleMesh::Rotate(const Eigen::Matrix3d &R, const Eigen::Vector
   return *this;
 }
 
-TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) {
-  return Add(mesh, true);
-}
+TriangleMesh &TriangleMesh::operator+=(const TriangleMesh &mesh) { return Add(mesh, true); }
 
 TriangleMesh &TriangleMesh::Add(const TriangleMesh &mesh, bool update_triangle_material_ids) {
   if (mesh.IsEmpty())
@@ -1586,7 +1584,8 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
 
 bool TriangleMesh::Material::IsTextured() const {
   return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
-          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || !gltfExtras.extension_images.empty());
+          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || (bool)gltfExtras.emissiveTexture ||
+          !gltfExtras.extension_images.empty());
 }
 
 bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {
@@ -1617,6 +1616,9 @@ bool TriangleMesh::Material::GltfExtras::operator<(const GltfExtras &other) cons
                                              other.emissiveFactor->data() + 3u));
       }
     }
+  }
+  if (emissiveTexture != other.emissiveTexture) {
+    return (emissiveTexture < other.emissiveTexture);
   }
   if (texture_idx != other.texture_idx) {
     return (texture_idx < other.texture_idx);
