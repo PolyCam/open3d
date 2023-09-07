@@ -171,7 +171,13 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
   for (auto &material : materials) {
     auto meshMaterial = geometry::TriangleMesh::Material();
 
-    meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
+    if (material.diffuse_texname.empty()) {
+      // Only set baseColor if there's no diffuse texture.
+      // In mtl files, if both a constant Kd and a texture map_Kd are specified, the constant is taken to mean the
+      // background color of the texture, only used when the texture has an alpha channel < 1.
+      // However, gltf and our renderer treats baseColor as a multiplier for the texture.
+      meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
+    }
 
     if (!material.normal_texname.empty()) {
       meshMaterial.normalMap = textureLoader(material.normal_texname)->FlipVertical();
