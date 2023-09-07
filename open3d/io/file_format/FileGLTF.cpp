@@ -814,7 +814,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     gltfPrimitive.material = gltfModel.materials.size();
     gltfMaterial.extensions = material.gltfExtras.extensions;
     if (material.baseClearCoat != 0.0f || material.baseClearCoatRoughness != 0.0f) {
-      auto object = tinygltf::Object();
+      auto object = tinygltf::Value::Object();
       object.insert(std::make_pair(clear_coat_extension_factor_key, tinygltf::Value((double)material.baseClearCoat)));
       object.insert(std::make_pair(clear_coat_extension_roughness_factor_key, tinygltf::Value((double)material.baseClearCoatRoughness)));
       gltfMaterial.extensions.insert(std::make_pair(clear_coat_extension, tinygltf::Value(std::move(object))));
