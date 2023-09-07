@@ -48,6 +48,11 @@
 namespace open3d {
 namespace io {
 
+static constexpr auto specular_glossiness_extension = "KHR_materials_pbrSpecularGlossiness";
+static constexpr auto clear_coat_extension = "KHR_materials_clearcoat";
+static constexpr auto clear_coat_extension_factor_key = "clearcoatFactor";
+static constexpr auto clear_coat_extension_roughness_factor_key = "clearcoatRoughnessFactor";
+
 static std::string GetMimeType(const tinygltf::Image &image) {
   if (!image.mimeType.empty()) {
     return (image.mimeType);
@@ -335,7 +340,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
     auto base_texture_info = tinygltf::TextureInfo();
     if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
       base_texture_info.index = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
-    } else if (const auto it = gltf_material.extensions.find("KHR_materials_pbrSpecularGlossiness"); it != gltf_material.extensions.end()) {
+    } else if (const auto it = gltf_material.extensions.find(specular_glossiness_extension); it != gltf_material.extensions.end()) {
       const auto &specularGlossiness = it->second;
       // Treat the diffuse texture as the base color texture.
       if (specularGlossiness.Has("diffuseTexture")) {
@@ -351,13 +356,27 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
 
     // Read any images referenced by extensions.
     material.gltfExtras.extensions = gltf_material.extensions;
+    auto has_clear_coat = false;
     for (auto &[extension_name, extension] : material.gltfExtras.extensions) {
       if (extension.IsObject()) {
         for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
-          if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+          if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == specular_glossiness_extension &&
               key == "diffuseTexture") {
             // Skip diffuse texture if it's already been read as the base color texture.
             continue;
+          } else if (extension_name == clear_coat_extension) {
+            has_clear_coat = true;
+            for (auto &[subkey, subvalue] : extension.Get<tinygltf::Value::Object>()) {
+              if (subkey == clear_coat_extension_factor_key) {
+                if (subvalue.IsNumber()) {
+                  material.baseClearCoat = (float)subvalue.GetNumberAsDouble();
+                }
+              } else if (subkey == clear_coat_extension_roughness_factor_key) {
+                if (subvalue.IsNumber()) {
+                  material.baseClearCoatRoughness = (float)subvalue.GetNumberAsDouble();
+                }
+              }
+            }
           }
           // Assume anything that has an "index" is a texture. This is true for all the material extensions in
           // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos.
@@ -374,6 +393,9 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           }
         }
       }
+    }
+    if (has_clear_coat) {
+      material.gltfExtras.extensions.erase(clear_coat_extension);
     }
 
     return material;
@@ -791,6 +813,12 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
     InitializeGltfMaterial(gltfMaterial, mesh);
     gltfPrimitive.material = gltfModel.materials.size();
     gltfMaterial.extensions = material.gltfExtras.extensions;
+    if (material.baseClearCoat != 0.0f || material.baseClearCoatRoughness != 0.0f) {
+      auto object = tinygltf::Object();
+      object.insert(std::make_pair(clear_coat_extension_factor_key, tinygltf::Value((double)material.baseClearCoat)));
+      object.insert(std::make_pair(clear_coat_extension_roughness_factor_key, tinygltf::Value((double)material.baseClearCoatRoughness)));
+      gltfMaterial.extensions.insert(std::make_pair(clear_coat_extension, tinygltf::Value(std::move(object))));
+    }
     for (const auto &[extension_name, extension] : gltfMaterial.extensions) {
       extensions_used.insert(extension_name);
     }
@@ -831,7 +859,7 @@ bool SaveMeshGLTF(const std::string &fileName, const geometry::TriangleMesh &_me
           for (auto &[key, value] : extension.Get<tinygltf::Value::Object>()) {
             if (value.Has("index")) {
               auto &texture_info_obj = value.Get<tinygltf::Value::Object>();
-              if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == "KHR_materials_pbrSpecularGlossiness" &&
+              if (material.gltfExtras.texture_from_specular_glossiness_diffuse && extension_name == specular_glossiness_extension &&
                   key == "diffuseTexture") {
                 // The texture that was assigned to the metallic-roughness base color texture was actually a
                 // specular-glossiness diffuse texture. Move it from there to here.
