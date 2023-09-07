@@ -1603,6 +1603,8 @@ bool TriangleMesh::Material::IsTextured() const {
           !gltfExtras.extension_images.empty());
 }
 
+bool TriangleMesh::Material::HasBaseClearCoat() const { return (baseClearCoat != 0.0f || baseClearCoatRoughness != 0.0f); }
+
 bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {
   for (auto index = 0u; index < 4u; ++index) {
     if (f4[index] != other.f4[index]) {

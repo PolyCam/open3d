@@ -676,6 +676,7 @@ class TriangleMesh : public MeshBase {
 
   struct Material {
     bool IsTextured() const;
+    bool HasBaseClearCoat() const;
 
     struct MaterialParameter {
       float f4[4] = {0};
