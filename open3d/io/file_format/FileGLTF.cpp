@@ -481,7 +481,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             }
           }
 
-          if (attribute.first == "TEXCOORD_0") {
+          if (attribute.first == "TEXCOORD_1") {
             tinygltf::Accessor &positions_accessor = model.accessors[attribute.second];
             tinygltf::BufferView &positions_view = model.bufferViews[positions_accessor.bufferView];
             const tinygltf::Buffer &positions_buffer = model.buffers[positions_view.buffer];
