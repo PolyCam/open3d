@@ -433,7 +433,8 @@ std::shared_ptr<PointCloud> TriangleMesh::SamplePointsUniformlyImpl(size_t numbe
   // sample point cloud
   bool has_vert_normal = HasVertexNormals();
   bool has_vert_color = HasVertexColors();
-  bool has_textures = HasTextures() && HasTriangleUvs() && HasTriangleMaterialIds();
+  const auto triangle_uv_usage = GetTriangleUvUsage();
+  bool has_textures = triangle_uv_usage.has_value() && HasTextures() && HasTriangleUvs() && HasTriangleMaterialIds();
 
   if (seed == -1) {
     std::random_device rd;
@@ -487,17 +488,26 @@ std::shared_ptr<PointCloud> TriangleMesh::SamplePointsUniformlyImpl(size_t numbe
       }
 
       if (has_textures) {  // pull colors from textures
-        // Get the point in uv space
-        Eigen::Vector2d point_uv = a * triangle_uvs_[3 * tidx + 0] + b * triangle_uvs_[3 * tidx + 1] + c * triangle_uvs_[3 * tidx + 2];
-        const Image &tri_image = textures_[triangle_material_ids_[tidx]];
-        const int u = std::clamp((int)std::round(point_uv[0] * tri_image.width_), 0, tri_image.width_ - 1);
-        const int v = std::clamp((int)std::round(point_uv[1] * tri_image.height_), 0, tri_image.height_ - 1);
-        // Get the color from the image
-        if (tri_image.num_of_channels_ == 3) {
-          Eigen::Vector3d &color = pcd->colors_[point_idx];
-          for (int ch = 0; ch < tri_image.num_of_channels_; ch++) {
-            color[ch] = *tri_image.PointerAt<uint8_t>(u, v, ch) / 255.0;
+        const auto &material = materials_[triangle_material_ids_[tidx]];
+        if (material.gltfExtras.texture_idx.has_value()) {
+          // Get the point in uv space
+          const auto uv_indices = GetTriangleUvIndices(tidx, *triangle_uv_usage);
+          const auto uv_indices_valid = (uv_indices[0] >= 0 && uv_indices[1] >= 0 && uv_indices[2] >= 0);
+          Eigen::Vector2d point_uv = uv_indices_valid
+                                         ? (a * triangle_uvs_[uv_indices[0]] + b * triangle_uvs_[uv_indices[1]] + c * triangle_uvs_[uv_indices[2]])
+                                         : Eigen::Vector2d(0.5, 0.5);
+          const Image &tri_image = textures_[*material.gltfExtras.texture_idx];
+          const int u = std::clamp((int)std::round(point_uv[0] * tri_image.width_), 0, tri_image.width_ - 1);
+          const int v = std::clamp((int)std::round(point_uv[1] * tri_image.height_), 0, tri_image.height_ - 1);
+          // Get the color from the image
+          if (tri_image.num_of_channels_ == 3) {
+            Eigen::Vector3d &color = pcd->colors_[point_idx];
+            for (int ch = 0; ch < tri_image.num_of_channels_; ch++) {
+              color[ch] = *tri_image.PointerAt<uint8_t>(u, v, ch) / 255.0;
+            }
           }
+        } else {
+          pcd->colors_[point_idx] = Eigen::Vector3d(0.5, 0.5, 0.5);
         }
       } else if (has_vert_color) {
         pcd->colors_[point_idx] = a * vertex_colors_[triangle(0)] + b * vertex_colors_[triangle(1)] + c * vertex_colors_[triangle(2)];
