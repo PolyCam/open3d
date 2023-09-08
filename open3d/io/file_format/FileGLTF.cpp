@@ -347,12 +347,13 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
     material.baseRoughness = gltf_material.pbrMetallicRoughness.roughnessFactor;
     auto base_texture_info = tinygltf::TextureInfo();
     if (gltf_material.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-      base_texture_info.index = gltf_material.pbrMetallicRoughness.baseColorTexture.index;
+      base_texture_info = gltf_material.pbrMetallicRoughness.baseColorTexture;
     } else if (const auto it = gltf_material.extensions.find(specular_glossiness_extension); it != gltf_material.extensions.end()) {
       const auto &specularGlossiness = it->second;
       // Treat the diffuse texture as the base color texture.
       if (specularGlossiness.Has("diffuseTexture")) {
         base_texture_info.index = specularGlossiness.Get("diffuseTexture").Get("index").Get<int>();
+        base_texture_info.texCoord = specularGlossiness.Get("diffuseTexture").Get("texCoord").Get<int>();
         material.gltfExtras.texture_from_specular_glossiness_diffuse = true;
       }
     }
