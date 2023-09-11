@@ -284,19 +284,21 @@ static Eigen::Matrix3d GetTextureTransformation(const tinygltf::Value::Object &o
   auto transformation = Eigen::Matrix3d::Identity();
   const auto translation = GetVector2Child(object, "offset");
   if (translation.has_value()) {
-    transformation.row(2u) << translation(0u), translation(1u), 1.0;
+    transformation.row(2u) << (*translation)(0u), (*translation)(1u), 1.0;
   }
   const auto rotation = GetDoubleChild(object, "rotation");
   if (rotation.has_value()) {
     const auto sine = std::sin(*rotation);
     const auto cosine = std::cos(*rotation);
-    const auto rotation_transformation = Eigen::Matrix3d(cosine, sine, 0.0, -sine, cosine, 0.0, 0.0, 0.0, 1.0);
-    transformation = Eigen::Matrix3d(transformation * rotation_transformation);
+    auto rotation_transformation = Eigen::Matrix3d();
+    rotation_transformation << cosine, sine, 0.0, -sine, cosine, 0.0, 0.0, 0.0, 1.0;
+    transformation = transformation * rotation_transformation;
   }
   const auto scale = GetVector2Child(object, "scale");
   if (scale.has_value()) {
-    const auto scale_transformation = Eigen::Matrix3d((*scale)(0u), 0.0, 0.0, 0.0, (*scale)(1u), 0.0, 0.0, 0.0, 1.0);
-    transformation = Eigen::Matrix3d(transformation * scale_transformation);
+    const auto scale_transformation = Eigen::Matrix3d();
+    scale_transformation << (*scale)(0u), 0.0, 0.0, 0.0, (*scale)(1u), 0.0, 0.0, 0.0, 1.0;
+    transformation = transformation * scale_transformation;
   }
   return (transformation);
 }
