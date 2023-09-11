@@ -1598,9 +1598,24 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
 }
 
 bool TriangleMesh::Material::IsTextured() const {
-  return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
-          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || (bool)gltfExtras.emissiveTexture ||
-          !gltfExtras.extension_images.empty());
+  return (albedo.has_value() || normalMap.has_value() || ambientOcclusion.has_value() || metallic.has_value() || roughness.has_value() ||
+          reflectance.has_value() || clearCoat.has_value() || clearCoatRoughness.has_value() || anisotropy.has_value() ||
+          gltfExtras.texture_idx.has_value() || gltfExtras.emissiveTexture.has_value() || !gltfExtras.extension_images.empty());
+}
+
+void TriangleMesh::Material::RemoveTextures() {
+  albedo.reset();
+  normalMap.reset();
+  ambientOcclusion.reset();
+  metallic.reset();
+  roughness.reset();
+  reflectance.reset();
+  clearCoat.reset();
+  clearCoatRoughness.reset();
+  anisotropy.reset();
+  gltfExtras.texture_idx.reset();
+  gltfExtras.emissiveTexture.reset();
+  gltfExtras.extension_images.clear();
 }
 
 bool TriangleMesh::Material::HasBaseClearCoat() const { return (baseClearCoat != 0.0f || baseClearCoatRoughness != 0.0f); }

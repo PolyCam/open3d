@@ -656,6 +656,13 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
           mesh_temp.triangles_uvs_idx_ = std::vector<Eigen::Vector3i>(mesh_temp.triangles_.size(), Eigen::Vector3i::Constant(-1));
         }
 
+        // handle invalid meshes with a texture but no texture coordinates by skipping texturing altogether
+        if (materials[material_id].material_.IsTextured() &&
+            (texture_coordinates_attribute.has_value() ? primitive.attributes.find(*texture_coordinates_attribute) == primitive.attributes.end()
+                                                       : true)) {
+          materials[material_id].material_.RemoveTextures();
+        }
+
         // read textures
         mesh_temp.triangle_material_ids_.resize(mesh_temp.triangles_.size(), (int)material_id);
         if (materials[material_id].material_.IsTextured()) {
