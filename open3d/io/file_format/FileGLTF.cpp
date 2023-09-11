@@ -364,7 +364,8 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
         const auto texture_transformation_extension = tiny_gltf_texture.extensions.find("KHR_texture_transform");
         if (texture_transformation_extension != tiny_gltf_texture.extensions.end()) {
           if (texture_transformation_extension->second.IsObject()) {
-            specific_texture_transformation = GetTextureTransformation(texture_transformation_extension->second.Get<tinygltf::Value::Object>());
+            specific_texture_transformation =
+                GetTextureTransformation(texture_transformation_extension->second.template Get<tinygltf::Value::Object>());
           }
         }
         if (texture_transformation.has_value()) {
@@ -466,7 +467,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
             auto extra_texture_info = tinygltf::TextureInfo();
             extra_texture_info.index = index_value.GetNumberAsInt();
             auto open3d_texture = std::optional<unsigned int>();
-            reference_texture_if_needed(open3d_texture, texture_coordinates_index, extra_texture_info);
+            reference_texture_if_needed(open3d_texture, texture_coordinates_index, texture_transformation, extra_texture_info);
             if (open3d_texture.has_value()) {
               index_value = tinygltf::Value((int)material.gltfExtras.extension_images.size());
               material.gltfExtras.extension_images.push_back(*open3d_texture);
