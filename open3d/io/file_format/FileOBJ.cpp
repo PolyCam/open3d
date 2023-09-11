@@ -192,13 +192,43 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
   for (auto &material : materials) {
     auto meshMaterial = geometry::TriangleMesh::Material();
 
-    meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
-    meshMaterial.normalMap = reference_texture(material.normal_texname.empty() ? material.bump_texname : material.normal_texname);
-    meshMaterial.ambientOcclusion = reference_texture(material.ambient_occlusion_texname);
-    meshMaterial.gltfExtras.texture_idx = reference_texture(material.diffuse_texname);
-    meshMaterial.metallic = reference_texture(material.metallic_texname);
-    meshMaterial.roughness = reference_texture(material.roughness_texname);
-    meshMaterial.reflectance = reference_texture(material.sheen_texname);
+    if (material.diffuse_texname.empty()) {
+      // Only set baseColor if there's no diffuse texture.
+      // In mtl files, if both a constant Kd and a texture map_Kd are specified, the constant is taken to mean the
+      // background color of the texture, only used when the texture has an alpha channel < 1.
+      // However, gltf and our renderer treats baseColor as a multiplier for the texture.
+      meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
+    }
+
+    if (!material.normal_texname.empty()) {
+      meshMaterial.normalMap = reference_texture(material.normal_texname);
+    } else if (!material.bump_texname.empty()) {
+      // try bump, because there is often a misunderstanding of
+      // what bump map or normal map is
+      meshMaterial.normalMap = reference_texture(material.bump_texname);
+    }
+
+    if (!material.ambient_occlusion_texname.empty()) {
+      meshMaterial.ambientOcclusion = reference_texture(material.ambient_occlusion_texname);
+    }
+
+    if (!material.diffuse_texname.empty()) {
+      meshMaterial.gltfExtras.texture_idx = reference_texture(material.diffuse_texname);
+      mesh.textures_names_.push_back(material.diffuse_texname);
+    }
+
+    if (!material.metallic_texname.empty()) {
+      meshMaterial.metallic = reference_texture(material.metallic_texname);
+    }
+
+    if (!material.roughness_texname.empty()) {
+      meshMaterial.roughness = reference_texture(material.roughness_texname);
+      std::cout << "Loaded roughness from OBJ file " << std::endl;
+    }
+
+    if (!material.sheen_texname.empty()) {
+      meshMaterial.reflectance = reference_texture(material.sheen_texname);
+    }
 
     // NOTE: We want defaults of 0.0 and 1.0 for baseMetallic and
     // baseRoughness respectively but 0.0 is a valid value for both and
