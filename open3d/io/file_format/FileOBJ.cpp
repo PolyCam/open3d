@@ -198,6 +198,8 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
       // background color of the texture, only used when the texture has an alpha channel < 1.
       // However, gltf and our renderer treats baseColor as a multiplier for the texture.
       meshMaterial.baseColor = MaterialParameter::CreateRGB(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
+    } else {
+      meshMaterial.baseColor = MaterialParameter::CreateRGB(1.0f, 1.0f, 1.0f);
     }
 
     meshMaterial.normalMap = reference_texture(!material.normal_texname.empty() ? material.normal_texname : material.bump_texname);
