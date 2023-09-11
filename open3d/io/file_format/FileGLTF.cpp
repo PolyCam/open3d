@@ -263,7 +263,7 @@ static std::optional<Eigen::Vector2d> GetVector2Child(const tinygltf::Value::Obj
   if (child->second.ArrayLen() != 2u) {
     return (std::optional<Eigen::Vector2d>());
   }
-  if (!child->second.Get(0u).IsNumber() || child->second.Get(1u).IsNumber()) {
+  if (!child->second.Get(0u).IsNumber() || !child->second.Get(1u).IsNumber()) {
     return (std::optional<Eigen::Vector2d>());
   }
   return (Eigen::Vector2d{child->second.Get(0u).GetNumberAsDouble(), child->second.Get(1u).GetNumberAsDouble()});
