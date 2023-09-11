@@ -290,13 +290,13 @@ static Eigen::Matrix3d GetTextureTransformation(const tinygltf::Value::Object &o
   if (rotation.has_value()) {
     const auto sine = std::sin(*rotation);
     const auto cosine = std::cos(*rotation);
-    auto rotation_transformation = Eigen::Matrix3d();
+    Eigen::Matrix3d rotation_transformation;
     rotation_transformation << cosine, sine, 0.0, -sine, cosine, 0.0, 0.0, 0.0, 1.0;
     transformation = transformation * rotation_transformation;
   }
   const auto scale = GetVector2Child(object, "scale");
   if (scale.has_value()) {
-    const auto scale_transformation = Eigen::Matrix3d();
+    Eigen::Matrix3d scale_transformation;
     scale_transformation << (*scale)(0u), 0.0, 0.0, 0.0, (*scale)(1u), 0.0, 0.0, 0.0, 1.0;
     transformation = transformation * scale_transformation;
   }
