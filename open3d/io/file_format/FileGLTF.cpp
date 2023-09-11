@@ -252,21 +252,21 @@ bool LoadImageData(tinygltf::Image *gltf_image, const int image_idx, std::string
 
 FileGeometry ReadFileGeometryTypeGLTF(const std::string &path) { return FileGeometry(CONTAINS_TRIANGLES | CONTAINS_POINTS); }
 
-static std::optional<Eigen::Vector2> GetVector2Child(const tinygltf::Value::Object &object, const char *child_name) {
+static std::optional<Eigen::Vector2d> GetVector2Child(const tinygltf::Value::Object &object, const char *child_name) {
   const auto child = object.find(child_name);
   if (child == object.end()) {
-    return (std::optional<Eigen::Vector2>());
+    return (std::optional<Eigen::Vector2d>());
   }
   if (!child->second.IsArray()) {
-    return (std::optional<Eigen::Vector2>());
+    return (std::optional<Eigen::Vector2d>());
   }
   if (child->second.ArrayLen() != 2u) {
-    return (std::optional<Eigen::Vector2>());
+    return (std::optional<Eigen::Vector2d>());
   }
   if (!child->second.Get(0u).IsNumber() || child->second.Get(1u).IsNumber()) {
-    return (std::optional<Eigen::Vector2>());
+    return (std::optional<Eigen::Vector2d>());
   }
-  return (Eigen::Vector2{child->second.Get(0u).GetNumberAsDouble(), child->second.Get(1u).GetNumberAsDouble()});
+  return (Eigen::Vector2d{child->second.Get(0u).GetNumberAsDouble(), child->second.Get(1u).GetNumberAsDouble()});
 }
 
 static std::optional<double> GetDoubleChild(const tinygltf::Value::Object &object, const char *child_name) {
@@ -291,12 +291,12 @@ static Eigen::Matrix3d GetTextureTransformation(const tinygltf::Value::Object &o
     const auto sine = std::sin(*rotation);
     const auto cosine = std::cos(*rotation);
     const auto rotation_transformation = Eigen::Matrix3d(cosine, sine, 0.0, -sine, cosine, 0.0, 0.0, 0.0, 1.0);
-    transformation = transformation * rotation_transformation;
+    transformation = Eigen::Matrix3d(transformation * rotation_transformation);
   }
   const auto scale = GetVector2Child(object, "scale");
   if (scale.has_value()) {
     const auto scale_transformation = Eigen::Matrix3d((*scale)(0u), 0.0, 0.0, 0.0, (*scale)(1u), 0.0, 0.0, 0.0, 1.0);
-    transformation = transformation * scale_transformation;
+    transformation = Eigen::Matrix3d(transformation * scale_transformation);
   }
   return (transformation);
 }
