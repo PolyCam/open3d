@@ -281,7 +281,7 @@ static std::optional<double> GetDoubleChild(const tinygltf::Value::Object &objec
 }
 
 static Eigen::Matrix3d GetTextureTransformation(const tinygltf::Value::Object &object) {
-  auto transformation = Eigen::Matrix3d::Identity();
+  Eigen::Matrix3d transformation = Eigen::Matrix3d::Identity();
   const auto translation = GetVector2Child(object, "offset");
   if (translation.has_value()) {
     transformation.row(2u) << (*translation)(0u), (*translation)(1u), 1.0;
