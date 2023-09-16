@@ -68,7 +68,7 @@ std::string random_string(std::size_t length) {
 
 FileGeometry ReadFileGeometryTypeOBJ(const std::string &path) { return FileGeometry(CONTAINS_TRIANGLES | CONTAINS_POINTS); }
 
-bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
+bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress, TextureLoadMode texture_load_mode) {
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
@@ -140,7 +140,8 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
         if (!attrib.texcoords.empty() && 2 * idx.texcoord_index + 1 < int(attrib.texcoords.size())) {
           tinyobj::real_t tx = attrib.texcoords[2 * idx.texcoord_index + 0];
           tinyobj::real_t ty = attrib.texcoords[2 * idx.texcoord_index + 1];
-          mesh.triangle_uvs_.push_back(Eigen::Vector2d(tx, ty));
+          // Flip the Y coordinate because OBJ uses a different convention for where (0, 0) is.
+          mesh.triangle_uvs_.push_back(Eigen::Vector2d(tx, 1.0 - ty));
         }
       }
       mesh.triangles_.push_back(facet);
@@ -160,8 +161,8 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     mesh.triangle_uvs_.clear();
   }
 
-  auto textureLoader = [&mtl_base_path](std::string &relativePath) {
-    auto image = io::CreateImageFromFile(mtl_base_path + relativePath);
+  auto textureLoader = [&mtl_base_path, texture_load_mode](std::string &relativePath) {
+    auto image = io::CreateImageFromFile(mtl_base_path + relativePath, texture_load_mode);
     return image->HasData() ? image : std::shared_ptr<geometry::Image>();
   };
 
@@ -180,19 +181,19 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     }
 
     if (!material.normal_texname.empty()) {
-      meshMaterial.normalMap = textureLoader(material.normal_texname)->FlipVertical();
+      meshMaterial.normalMap = textureLoader(material.normal_texname);
     } else if (!material.bump_texname.empty()) {
       // try bump, because there is often a misunderstanding of
       // what bump map or normal map is
-      meshMaterial.normalMap = textureLoader(material.bump_texname)->FlipVertical();
+      meshMaterial.normalMap = textureLoader(material.bump_texname);
     }
 
     if (!material.ambient_occlusion_texname.empty()) {
-      meshMaterial.ambientOcclusion = textureLoader(material.ambient_occlusion_texname)->FlipVertical();
+      meshMaterial.ambientOcclusion = textureLoader(material.ambient_occlusion_texname);
     }
 
     if (!material.diffuse_texname.empty()) {
-      meshMaterial.albedo = textureLoader(material.diffuse_texname)->FlipVertical();
+      meshMaterial.albedo = textureLoader(material.diffuse_texname);
       mesh.textures_names_.push_back(material.diffuse_texname);
 
       // Legacy texture map support
@@ -206,7 +207,7 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     }
 
     if (!material.roughness_texname.empty()) {
-      meshMaterial.roughness = textureLoader(material.roughness_texname)->FlipVertical();
+      meshMaterial.roughness = textureLoader(material.roughness_texname);
       std::cout << "Loaded roughness from OBJ file " << std::endl;
     }
 

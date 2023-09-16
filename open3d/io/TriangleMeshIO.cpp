@@ -52,7 +52,9 @@ static const std::function<bool(const std::string &, geometry::TriangleMesh &, b
       }
     }
   } else if (ext == "obj") {
-    return ReadTriangleMeshFromOBJ;
+    return [texture_load_mode] (const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
+      return ReadTriangleMeshFromOBJ(filename, mesh, print_progress, texture_load_mode);
+    };
   } else if (ext == "ply") {
     return ReadTriangleMeshFromPLY;
   } else if (ext == "stl") {

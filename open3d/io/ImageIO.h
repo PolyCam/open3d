@@ -33,14 +33,23 @@
 namespace open3d {
 namespace io {
 
+enum class TextureLoadMode {
+  normal,
+  pass_through,          // Textures are not decoded on loading, nor encoded on writing. Only available with GLB, GLTF, and OBJ files.
+  ignore_external_files  // External texture files are neither read or written on writing. Only available with GLTF files. Resorts to
+                         // pass through on GLB and OBJ files, embedded textures on GLTF files and is ignored on other formats.
+};
+
+std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path);
+
 /// Factory function to create an image from a file (ImageFactory.cpp)
 /// Return an empty image if fail to read the file.
-std::shared_ptr<geometry::Image> CreateImageFromFile(const std::string &filename);
+std::shared_ptr<geometry::Image> CreateImageFromFile(const std::string &filename, TextureLoadMode texture_load_mode = TextureLoadMode::normal);
 
 /// The general entrance for reading an Image from a file
 /// The function calls read functions based on the extension name of filename.
 /// \return return true if the read function is successful, false otherwise.
-bool ReadImage(const std::string &filename, geometry::Image &image);
+bool ReadImage(const std::string &filename, geometry::Image &image, TextureLoadMode texture_load_mode = TextureLoadMode::normal);
 
 /// The general entrance for writing an Image to a file
 /// The function calls write functions based on the extension name of filename.
