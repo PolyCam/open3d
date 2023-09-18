@@ -515,4 +515,192 @@ void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage us
   }
 }
 
+MeshProblems RemoveProblematicGeometry(open3d::geometry::TriangleMesh &mesh) {
+  if (mesh.triangles_.empty()) {
+    throw std::runtime_error("Mesh has no triangles!");
+  }
+  if (mesh.vertices_.empty()) {
+    throw std::runtime_error("Mesh has no vertices!");
+  }
+  if (mesh.materials_.empty()) {
+    throw std::runtime_error("Mesh has no materials!");
+  }
+  if (mesh.triangle_material_ids_.empty()) {
+    throw std::runtime_error("Mesh has no material triangle IDs!");
+  }
+  if (mesh.triangle_material_ids_.size() != mesh.triangles_.size()) {
+    throw std::runtime_error("Mesh material triangle IDs has the wrong size!");
+  }
+
+  auto problems = MeshProblems{MeshProblems::Problems(), 0u, 0u};
+
+  struct MaterialSummary {
+    bool is_textured;
+  };
+  auto has_textured_materials = false;
+  auto is_material_valid = true;  //! @note Defined here instead of in the loop so that check_texture_reference can be defined outside the loop.
+  bool is_material_textured;      //! @note Defined here instead of in the loop so that check_texture_reference can be defined outside the loop.
+  auto check_texture_reference = [&](const std::optional<unsigned int> &texture_reference) {
+    if (texture_reference.has_value()) {
+      is_material_textured = true;
+      has_textured_materials = true;
+      if (*texture_reference >= mesh.textures_.size()) {
+        auto problem_tally = problems.problems_.insert(std::make_pair(MeshProblems::Problem::invalid_texture_index, 0u)).first;
+        ++problem_tally->second;
+        is_material_valid = false;
+      }
+    }
+  };
+  auto material_summaries = std::vector<std::optional<MaterialSummary>>();
+  material_summaries.reserve(mesh.materials_.size());
+  for (const auto &material : mesh.materials_) {
+    is_material_textured = false;
+
+    check_texture_reference(material.albedo);
+    check_texture_reference(material.normalMap);
+    check_texture_reference(material.ambientOcclusion);
+    check_texture_reference(material.metallic);
+    check_texture_reference(material.roughness);
+    check_texture_reference(material.reflectance);
+    check_texture_reference(material.clearCoat);
+    check_texture_reference(material.clearCoatRoughness);
+    check_texture_reference(material.anisotropy);
+    check_texture_reference(material.gltfExtras.texture_idx);
+    check_texture_reference(material.gltfExtras.emissiveTexture);
+
+    if (is_material_valid) {
+      material_summaries.push_back(MaterialSummary{is_material_textured});
+    } else {
+      material_summaries.push_back(std::optional<MaterialSummary>());
+      ++problems.discarded_materials_;
+      is_material_valid = true;
+    }
+  }
+  const auto triangle_uv_usage =
+      has_textured_materials ? mesh.GetTriangleUvUsage() : std::optional<open3d::geometry::TriangleMesh::TriangleUvUsage>();
+
+  auto is_triangle_valid = true;
+  auto add_triangle_in_mesh_problem = [&](MeshProblems::Problem problem) {
+    is_triangle_valid = false;
+    auto problem_tally = problems.problems_.insert(std::make_pair(problem, 0u)).first;
+    ++problem_tally->second;
+  };
+  unsigned int triangle_index = 0u;
+  while (triangle_index < mesh.triangles_.size()) {
+    const auto &triangle = mesh.triangles_[triangle_index];
+
+    auto has_vertex_index_problems = false;
+    for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
+      const auto vertex = triangle[vertex_in_triangle];
+      if (vertex < 0) {
+        add_triangle_in_mesh_problem(MeshProblems::Problem::missing_vertex_index);
+        has_vertex_index_problems = true;
+      } else if (vertex >= mesh.vertices_.size()) {
+        add_triangle_in_mesh_problem(MeshProblems::Problem::invalid_vertex_index);
+        has_vertex_index_problems = true;
+      }
+    }
+    if (!has_vertex_index_problems) {
+      if (triangle[0u] == triangle[1u] || triangle[0u] == triangle[2u] || triangle[1u] == triangle[2u]) {
+        add_triangle_in_mesh_problem(MeshProblems::Problem::topological_degenerate);
+      } else if (mesh.vertices_[triangle[0u]] == mesh.vertices_[triangle[1u]] || mesh.vertices_[triangle[0u]] == mesh.vertices_[triangle[2u]] ||
+                 mesh.vertices_[triangle[1u]] == mesh.vertices_[triangle[2u]]) {
+        add_triangle_in_mesh_problem(MeshProblems::Problem::geometrical_degenerate);
+      }
+    }
+    const auto material_index = mesh.triangle_material_ids_[triangle_index];
+    if (material_index < 0) {
+      add_triangle_in_mesh_problem(MeshProblems::Problem::missing_material_index);
+    } else if (material_index >= mesh.materials_.size()) {
+      add_triangle_in_mesh_problem(MeshProblems::Problem::invalid_material_index);
+    } else {
+      const auto &material_summary = material_summaries[material_index];
+      if (material_summary.has_value()) {
+        if (material_summary->is_textured) {
+          if (triangle_uv_usage == open3d::geometry::TriangleMesh::TriangleUvUsage::indices) {
+            const auto &texture_coordinates_indices = mesh.triangles_uvs_idx_[triangle_index];
+            for (auto vertex_in_triangle = 0u; vertex_in_triangle < 3u; ++vertex_in_triangle) {
+              const auto texture_coordinates_index = texture_coordinates_indices[vertex_in_triangle];
+              if (texture_coordinates_index < 0) {
+                add_triangle_in_mesh_problem(MeshProblems::Problem::missing_texture_coordinates_index);
+              } else if (texture_coordinates_index >= mesh.triangle_uvs_.size()) {
+                add_triangle_in_mesh_problem(MeshProblems::Problem::invalid_texture_coordinates_index);
+              }
+            }
+          } else if (!triangle_uv_usage.has_value()) {
+            add_triangle_in_mesh_problem(MeshProblems::Problem::bad_triangle_uv_usage);
+          }
+        }
+      } else {
+        is_triangle_valid = false;
+      }
+    }
+
+    if (is_triangle_valid) {
+      ++triangle_index;
+    } else {
+      ++problems.discarded_triangles_;
+      const auto last_triangle_index = mesh.triangles_.size() - 1u;
+      mesh.triangles_[triangle_index] = mesh.triangles_[last_triangle_index];
+      mesh.triangles_.pop_back();
+      mesh.triangle_material_ids_[triangle_index] = mesh.triangle_material_ids_[last_triangle_index];
+      mesh.triangle_material_ids_.pop_back();
+      if (triangle_uv_usage == open3d::geometry::TriangleMesh::TriangleUvUsage::indices) {
+        mesh.triangles_uvs_idx_[triangle_index] = mesh.triangles_uvs_idx_[last_triangle_index];
+        mesh.triangles_uvs_idx_.pop_back();
+      }
+      is_triangle_valid = true;
+    }
+  }
+
+  if (problems.discarded_materials_ > 0u) {
+    auto materials = std::vector<open3d::geometry::TriangleMesh::Material>();
+    materials.reserve(mesh.materials_.size() - problems.discarded_materials_);
+    auto remapped_material_indices = std::vector<unsigned int>();
+    remapped_material_indices.reserve(mesh.materials_.size());
+    for (auto material_index = 0u; material_index < mesh.materials_.size(); ++material_index) {
+      remapped_material_indices.push_back(materials.size());
+      if (material_summaries[material_index].has_value()) {
+        materials.push_back(std::move(mesh.materials_[material_index]));
+      }
+    }
+    mesh.materials_ = std::move(materials);
+    for (auto &triangle_material_index : mesh.triangle_material_ids_) {
+      triangle_material_index = remapped_material_indices[triangle_material_index];
+    }
+  }
+
+  return (problems);
+}
+
+bool MeshProblems::DidEncounterProblems() const { return (discarded_triangles_ > 0u || discarded_materials_ > 0u); }
+
+static const auto problem_descriptions = std::unordered_map<MeshProblems::Problem, std::string>{
+    std::make_pair(MeshProblems::Problem::missing_vertex_index, "Missing vertex index"),
+    std::make_pair(MeshProblems::Problem::invalid_vertex_index, "Invalid vertex index"),
+    std::make_pair(MeshProblems::Problem::topological_degenerate, "Topological degenerate triangle"),
+    std::make_pair(MeshProblems::Problem::geometrical_degenerate, "Geometrical degenerate triangle"),
+    std::make_pair(MeshProblems::Problem::missing_texture_coordinates_index, "Missing texture coordinates index"),
+    std::make_pair(MeshProblems::Problem::invalid_texture_coordinates_index, "Invalid texture coordinates index"),
+    std::make_pair(MeshProblems::Problem::bad_triangle_uv_usage, "Bad triangle UV usage"),
+    std::make_pair(MeshProblems::Problem::missing_material_index, "Missing material index"),
+    std::make_pair(MeshProblems::Problem::invalid_material_index, "Invalid material index"),
+    std::make_pair(MeshProblems::Problem::invalid_texture_index, "Invalid texture index")};
+
+std::ostream &operator<<(std::ostream &stream, const MeshProblems &problems) {
+  if (problems.DidEncounterProblems()) {
+    stream << "The following mesh problems were encountered:" << std::endl;
+    for (const auto &problem : problems.problems_) {
+      stream << problem_descriptions.find(problem.first)->second << ": " << problem.second << " time(s)" << std::endl;
+    }
+    if (problems.discarded_materials_ > 0u) {
+      stream << problems.discarded_materials_ << " material(s) discarded" << std::endl;
+    }
+    if (problems.discarded_triangles_ > 0u) {
+      stream << problems.discarded_triangles_ << " triangle(s) discarded" << std::endl;
+    }
+  }
+  return (stream);
+}
+
 }  // namespace open3d::geometry
