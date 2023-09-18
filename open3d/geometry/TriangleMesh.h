@@ -26,12 +26,13 @@
 
 #pragma once
 
+#include <tiny_gltf.h>
+
 #include <Eigen/Core>
 #include <map>
 #include <memory>
 #include <numeric>
 #include <optional>
-#include <tiny_gltf.h>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -110,8 +111,7 @@ class TriangleMesh : public MeshBase {
 
   /// Returns `true` if the mesh has texture.
   bool HasTextures() const {
-    bool is_all_texture_valid = std::accumulate(textures_.begin(), textures_.end(), true, [](bool a, const Image &b) { return a && !b.IsEmpty(); });
-    return !textures_.empty() && is_all_texture_valid;
+    return (!textures_.empty() && std::any_of(textures_.begin(), textures_.end(), [](const Image &image) { return (!image.IsEmpty()); }));
   }
 
   bool HasMaterials() const { return !materials_.empty(); }
@@ -676,6 +676,8 @@ class TriangleMesh : public MeshBase {
 
   struct Material {
     bool IsTextured() const;
+    void RemoveTextures();
+    bool HasBaseClearCoat() const;
 
     struct MaterialParameter {
       float f4[4] = {0};
@@ -739,15 +741,15 @@ class TriangleMesh : public MeshBase {
     float baseClearCoatRoughness = 0.f;
     float baseAnisotropy = 0.f;
 
-    std::shared_ptr<Image> albedo;
-    std::shared_ptr<Image> normalMap;
-    std::shared_ptr<Image> ambientOcclusion;
-    std::shared_ptr<Image> metallic;
-    std::shared_ptr<Image> roughness;
-    std::shared_ptr<Image> reflectance;
-    std::shared_ptr<Image> clearCoat;
-    std::shared_ptr<Image> clearCoatRoughness;
-    std::shared_ptr<Image> anisotropy;
+    std::optional<unsigned int> albedo;              // Indices into textures_.
+    std::optional<unsigned int> normalMap;           // Indices into textures_.
+    std::optional<unsigned int> ambientOcclusion;    // Indices into textures_.
+    std::optional<unsigned int> metallic;            // Indices into textures_.
+    std::optional<unsigned int> roughness;           // Indices into textures_.
+    std::optional<unsigned int> reflectance;         // Indices into textures_.
+    std::optional<unsigned int> clearCoat;           // Indices into textures_.
+    std::optional<unsigned int> clearCoatRoughness;  // Indices into textures_.
+    std::optional<unsigned int> anisotropy;          // Indices into textures_.
 
     // Additional properties added by polycam to more accurately model a gltf/glb material
     // as neccessary for properly round tripping materials for roomplan captures.
@@ -756,16 +758,18 @@ class TriangleMesh : public MeshBase {
       std::string alphaMode = "OPAQUE";
       double alphaCutoff = 0.5;
       std::optional<Eigen::Vector3d> emissiveFactor;
-      std::shared_ptr<Image> emissiveTexture;
-      std::optional<unsigned int> texture_idx;  // If this material should point to a texture, provide the idx (index into TriangleMesh::textures_).
+      std::optional<unsigned int> emissiveTexture;  // Indices into textures_.
+      std::optional<unsigned int> texture_idx;      // Indices into textures_.
       // References to textures in extensions are replaced by indexes into extension_images.
       tinygltf::ExtensionMap extensions;
-      std::vector<Image> extension_images;
+      std::vector<unsigned int> extension_images;  // Indices into textures_.
       bool texture_from_specular_glossiness_diffuse = false;
 
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
-                emissiveFactor == other.emissiveFactor && emissiveTexture == other.emissiveTexture && texture_idx == other.texture_idx);
+                emissiveFactor == other.emissiveFactor && emissiveTexture == other.emissiveTexture && texture_idx == other.texture_idx &&
+                extensions == other.extensions && extension_images == other.extension_images &&
+                texture_from_specular_glossiness_diffuse == other.texture_from_specular_glossiness_diffuse);
       }
 
       bool operator!=(const GltfExtras &other) const { return (!(*this == other)); }

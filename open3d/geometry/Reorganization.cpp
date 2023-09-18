@@ -415,11 +415,6 @@ static std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh
 
     // Add the material.
     single_material_mesh.materials_.push_back(material);
-    if (material.gltfExtras.texture_idx.has_value()) {
-      assert(*material.gltfExtras.texture_idx < mesh.textures_.size());
-      single_material_mesh.materials_.begin()->gltfExtras.texture_idx = 0u;
-      single_material_mesh.textures_.push_back(mesh.textures_[*material.gltfExtras.texture_idx]);
-    }
 
     single_material_meshes.push_back(std::move(single_material_mesh));
   }
@@ -468,8 +463,14 @@ void MakeEffectiveMaterials(TriangleMesh &mesh) {
 }
 
 bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Material> &materials) {
-  return (std::any_of(materials.begin(), materials.end(),
-                      [&](const TriangleMesh::Material &material) { return (material.gltfExtras.texture_idx == texture); }));
+  return (std::any_of(materials.begin(), materials.end(), [&](const TriangleMesh::Material &material) {
+    return (material.gltfExtras.texture_idx == texture || material.albedo == texture || material.normalMap == texture ||
+            material.ambientOcclusion == texture || material.metallic == texture || material.roughness == texture ||
+            material.reflectance == texture || material.clearCoat == texture || material.clearCoatRoughness == texture ||
+            material.anisotropy == texture || material.gltfExtras.emissiveTexture == texture ||
+            std::find(material.gltfExtras.extension_images.begin(), material.gltfExtras.extension_images.end(), texture) !=
+                material.gltfExtras.extension_images.end());
+  }));
 }
 
 void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage) {
