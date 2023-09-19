@@ -3,6 +3,9 @@
 #include <open3d/geometry/TriangleMesh.h>
 
 #include <vector>
+#include <ostream>
+#include <string>
+#include <unordered_map>
 
 namespace open3d::geometry {
 
@@ -73,5 +76,33 @@ bool IsTextureInUse(unsigned int texture, const std::vector<TriangleMesh::Materi
 
 //! @pre mesh.GetTriangleUvUsage().has_value()
 void ConvertTriangleUvUsage(TriangleMesh &mesh, TriangleMesh::TriangleUvUsage usage);
+
+struct MeshProblems {
+  enum class Problem {
+    missing_vertex_index,               // A vertex index was negative.
+    invalid_vertex_index,               // A vertex index was too large.
+    topological_degenerate,             // A triangle where multiple vertices had the same vertex index.
+    geometrical_degenerate,             // A triangle where multiple vertices had the same vertex coordinate.
+    missing_texture_coordinates_index,  // A triangle that has a textured material had texture coordinate indices that were negative.
+    invalid_texture_coordinates_index,  // A texture coordinate index was too large.
+    bad_triangle_uv_usage,              // A textured triangle was found where the triangle UV usage couldn't be determined.
+    missing_material_index,             // A triangle's material index was negative.
+    invalid_material_index,             // A triangle's material index was too large.
+    invalid_texture_index               // A texture reference was invalid.
+  };
+  using Count = unsigned int;
+  using Problems = std::unordered_map<Problem, Count>;
+  Problems problems_;
+  Count discarded_materials_;
+  Count discarded_triangles_;
+  bool DidEncounterProblems() const;
+};
+
+std::ostream &operator<<(std::ostream &stream, const MeshProblems &problems);
+
+//! @brief Removes problematic triangles and materials and returns a tally of how many times each type of problem was encountered.
+//! @note Will throw on an empty mesh or if a fundamental problem is encountered such as vectors that should be the same size, but isn't that
+//! prevents the rest of the algorithm from executing.
+MeshProblems RemoveProblematicGeometry(open3d::geometry::TriangleMesh &mesh);
 
 }  // namespace open3d::geometry
