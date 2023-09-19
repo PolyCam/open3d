@@ -768,7 +768,7 @@ class TriangleMesh : public MeshBase {
       bool operator==(const GltfExtras &other) const {
         return (doubleSided == other.doubleSided && alphaMode == other.alphaMode && alphaCutoff == other.alphaCutoff &&
                 emissiveFactor == other.emissiveFactor && emissiveTexture == other.emissiveTexture && texture_idx == other.texture_idx &&
-                extensions == other.extensions && extension_images == other.extension_images &&
+                extension_images == other.extension_images &&
                 texture_from_specular_glossiness_diffuse == other.texture_from_specular_glossiness_diffuse);
       }
 

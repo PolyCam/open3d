@@ -1665,9 +1665,6 @@ bool TriangleMesh::Material::GltfExtras::operator<(const GltfExtras &other) cons
   if (texture_idx != other.texture_idx) {
     return (texture_idx < other.texture_idx);
   }
-  if (extensions != other.extensions) {
-    return (extensions < other.extensions);
-  }
   if (extension_images != other.extension_images) {
     return (extension_images < other.extension_images);
   }

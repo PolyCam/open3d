@@ -29,6 +29,7 @@
 #include <string>
 
 #include "open3d/geometry/TriangleMesh.h"
+#include "open3d/io/ImageIO.h"
 
 namespace open3d {
 namespace io {
@@ -36,13 +37,6 @@ namespace io {
 /// Factory function to create a mesh from a file (TriangleMeshFactory.cpp)
 /// Return an empty mesh if fail to read the file.
 std::shared_ptr<geometry::TriangleMesh> CreateMeshFromFile(const std::string &filename, bool print_progress = false);
-
-enum class TextureLoadMode {
-  normal,
-  pass_through, // Textures are not decoded on loading, nor encoded on writing. Only available with GLB and GLTF files.
-  ignore_external_files // External texture files are neither read or written on writing. Only available with GLTF files. Resorts to
-      // pass through on GLB files, embedded textures on GLTF files and is ignored on other formats.
-};
 
 /// The general entrance for reading a TriangleMesh from a file
 /// The function calls read functions based on the extension name of filename.
@@ -72,7 +66,8 @@ bool ReadTriangleMeshFromSTL(const std::string &filename, geometry::TriangleMesh
 bool WriteTriangleMeshToSTL(const std::string &filename, const geometry::TriangleMesh &mesh, bool write_ascii, bool compressed,
                             bool write_vertex_normals, bool write_vertex_colors, bool write_triangle_uvs, bool print_progress);
 
-bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress);
+bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress,
+                             TextureLoadMode texture_load_mode);
 
 bool WriteTriangleMeshToOBJ(const std::string &filename, const geometry::TriangleMesh &mesh, bool write_ascii, bool compressed,
                             bool write_vertex_normals, bool write_vertex_colors, bool write_triangle_uvs, bool print_progress);

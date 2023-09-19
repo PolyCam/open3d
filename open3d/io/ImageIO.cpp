@@ -26,9 +26,9 @@
 
 #include "open3d/io/ImageIO.h"
 
+#include <filesystem>
 #include <fstream>
 #include <unordered_map>
-#include <filesystem>
 
 #include "open3d/utility/Console.h"
 #include "open3d/utility/FileSystem.h"
@@ -55,13 +55,35 @@ static const std::unordered_map<std::string, std::function<bool(const std::strin
 
 namespace io {
 
-std::shared_ptr<geometry::Image> CreateImageFromFile(const std::string &filename) {
+std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
+  auto stream = std::ifstream(path, std::ios::in | std::ios::binary);
+  stream.seekg(0, std::ios::end);
+  auto size = stream.tellg();
+  stream.seekg(0);
+  std::vector<uint8_t> buffer(size);
+  stream.read((char *)buffer.data(), size);
+  stream.close();
+  return (buffer);
+}
+
+std::shared_ptr<geometry::Image> CreateImageFromFile(const std::string &filename, TextureLoadMode texture_load_mode) {
   auto image = std::make_shared<geometry::Image>();
-  ReadImage(filename, *image);
+  ReadImage(filename, *image, texture_load_mode);
   return image;
 }
 
-bool ReadImage(const std::string &filename, geometry::Image &image) {
+bool ReadImage(const std::string &filename, geometry::Image &image, TextureLoadMode texture_load_mode) {
+  if (texture_load_mode == TextureLoadMode::pass_through || texture_load_mode == TextureLoadMode::ignore_external_files) {
+    if (texture_load_mode == TextureLoadMode::pass_through) {
+      image.pass_through_ = geometry::Image::EncodedData{ReadFileIntoBuffer(filename), utility::filesystem::GetMimeType(filename)};
+    } else {
+      image.pass_through_ = std::filesystem::path(filename);
+    }
+    // Make a fake 1x1 RGB image just in case somewhere else in Open3D the image integrity is verified.
+    image.Prepare(1, 1, 3, 1);
+    image.data_ = std::vector<uint8_t>(3, uint8_t(0));
+    return true;
+  }
   std::string filename_ext = utility::filesystem::GetFileExtensionInLowerCase(filename);
   if (filename_ext.empty()) {
     utility::LogWarning("Read geometry::Image failed: missing file extension.");
@@ -77,7 +99,7 @@ bool ReadImage(const std::string &filename, geometry::Image &image) {
 
 bool WriteImage(const std::string &filename, const geometry::Image &image, int quality /* = 90*/) {
   if (image.pass_through_.has_value()) {
-    return(std::visit(
+    return (std::visit(
         [&](const auto &pass_through) {
           using PassThroughType = typename std::decay<decltype(pass_through)>::type;
           if constexpr (std::is_same<PassThroughType, geometry::Image::EncodedData>::value) {
@@ -89,7 +111,7 @@ bool WriteImage(const std::string &filename, const geometry::Image &image, int q
             file_out.close();
             return true;
           } else if constexpr (std::is_same<PassThroughType, std::filesystem::path>::value) {
-            if(pass_through == std::filesystem::path(filename)) {
+            if (pass_through == std::filesystem::path(filename)) {
               return true;
             }
             return std::filesystem::copy_file(pass_through, filename);

@@ -60,17 +60,6 @@ static std::string GetMimeType(const tinygltf::Image &image) {
   return (utility::filesystem::GetMimeType(image.uri));
 }
 
-static std::vector<uint8_t> ReadFileIntoBuffer(const std::string &path) {
-  auto stream = std::ifstream(path, std::ios::in | std::ios::binary);
-  stream.seekg(0, std::ios::end);
-  auto size = stream.tellg();
-  stream.seekg(0);
-  std::vector<uint8_t> buffer(size);
-  stream.read((char *)buffer.data(), size);
-  stream.close();
-  return (buffer);
-}
-
 static void WriteFileFromBuffer(const std::string &path, const std::vector<uint8_t> &buffer) {
   auto stream = std::ofstream(path, std::ios::out | std::ios::binary);
   stream.write(reinterpret_cast<const std::ofstream::char_type *>(buffer.data()), buffer.size());

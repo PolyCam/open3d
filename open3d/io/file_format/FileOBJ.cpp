@@ -71,7 +71,7 @@ std::string random_string(std::size_t length) {
 
 FileGeometry ReadFileGeometryTypeOBJ(const std::string &path) { return FileGeometry(CONTAINS_TRIANGLES | CONTAINS_POINTS); }
 
-bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress) {
+bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh &mesh, bool print_progress, TextureLoadMode texture_load_mode) {
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
@@ -175,7 +175,7 @@ bool ReadTriangleMeshFromOBJ(const std::string &filename, geometry::TriangleMesh
     }
     const auto absolute_path = mtl_base_path + relative_path;
     auto image = geometry::Image();
-    io::ReadImage(absolute_path, image);
+    io::ReadImage(absolute_path, image, texture_load_mode);
     if (!image.HasData()) {
       return (std::optional<unsigned int>());
     }
