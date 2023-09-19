@@ -145,12 +145,27 @@ TriangleMesh &TriangleMesh::Add(const TriangleMesh &mesh, bool update_triangle_m
     }
   }
 
+  auto update_texture_index = [old_tex_num](std::optional<unsigned int> &texture_index) {
+    if (texture_index.has_value()) {
+      *texture_index += old_tex_num;
+    }
+  };
   materials_.reserve(materials_.size() + mesh.materials_.size());
   for (const auto &material : mesh.materials_) {
     materials_.push_back(material);
-    auto &texture_idx = materials_.back().gltfExtras.texture_idx;
-    if (texture_idx.has_value()) {
-      *texture_idx += old_tex_num;
+    update_texture_index(materials_.back().albedo);
+    update_texture_index(materials_.back().normalMap);
+    update_texture_index(materials_.back().ambientOcclusion);
+    update_texture_index(materials_.back().metallic);
+    update_texture_index(materials_.back().roughness);
+    update_texture_index(materials_.back().reflectance);
+    update_texture_index(materials_.back().clearCoat);
+    update_texture_index(materials_.back().clearCoatRoughness);
+    update_texture_index(materials_.back().anisotropy);
+    update_texture_index(materials_.back().gltfExtras.emissiveTexture);
+    update_texture_index(materials_.back().gltfExtras.texture_idx);
+    for (auto &extension_image : materials_.back().gltfExtras.extension_images) {
+      extension_image += old_tex_num;
     }
   }
 
@@ -1593,10 +1608,27 @@ std::unordered_map<Eigen::Vector2i, double, utility::hash_eigen<Eigen::Vector2i>
 }
 
 bool TriangleMesh::Material::IsTextured() const {
-  return ((bool)albedo || (bool)normalMap || (bool)ambientOcclusion || (bool)metallic || (bool)roughness || (bool)reflectance || (bool)clearCoat ||
-          (bool)clearCoatRoughness || (bool)anisotropy || gltfExtras.texture_idx.has_value() || (bool)gltfExtras.emissiveTexture ||
-          !gltfExtras.extension_images.empty());
+  return (albedo.has_value() || normalMap.has_value() || ambientOcclusion.has_value() || metallic.has_value() || roughness.has_value() ||
+          reflectance.has_value() || clearCoat.has_value() || clearCoatRoughness.has_value() || anisotropy.has_value() ||
+          gltfExtras.texture_idx.has_value() || gltfExtras.emissiveTexture.has_value() || !gltfExtras.extension_images.empty());
 }
+
+void TriangleMesh::Material::RemoveTextures() {
+  albedo.reset();
+  normalMap.reset();
+  ambientOcclusion.reset();
+  metallic.reset();
+  roughness.reset();
+  reflectance.reset();
+  clearCoat.reset();
+  clearCoatRoughness.reset();
+  anisotropy.reset();
+  gltfExtras.texture_idx.reset();
+  gltfExtras.emissiveTexture.reset();
+  gltfExtras.extension_images.clear();
+}
+
+bool TriangleMesh::Material::HasBaseClearCoat() const { return (baseClearCoat != 0.0f || baseClearCoatRoughness != 0.0f); }
 
 bool TriangleMesh::Material::MaterialParameter::operator<(const MaterialParameter &other) const {
   for (auto index = 0u; index < 4u; ++index) {
@@ -1633,6 +1665,16 @@ bool TriangleMesh::Material::GltfExtras::operator<(const GltfExtras &other) cons
   if (texture_idx != other.texture_idx) {
     return (texture_idx < other.texture_idx);
   }
+  if (extensions != other.extensions) {
+    return (extensions < other.extensions);
+  }
+  if (extension_images != other.extension_images) {
+    return (extension_images < other.extension_images);
+  }
+  if (texture_from_specular_glossiness_diffuse != other.texture_from_specular_glossiness_diffuse) {
+    return (texture_from_specular_glossiness_diffuse < other.texture_from_specular_glossiness_diffuse);
+  }
+
   return (false);
 }
 
@@ -1648,11 +1690,10 @@ bool TriangleMesh::Material::operator<(const Material &other) const {
 bool TriangleMesh::Material::IsEqualIgnoringName(const Material &other) const {
   return (baseColor == other.baseColor && gltfExtras == other.gltfExtras && baseMetallic == other.baseMetallic &&
           baseRoughness == other.baseRoughness && baseReflectance == other.baseReflectance && baseClearCoat == other.baseClearCoat &&
-          baseClearCoatRoughness == other.baseClearCoatRoughness && baseAnisotropy == other.baseAnisotropy && albedo.get() == other.albedo.get() &&
-          normalMap.get() == other.normalMap.get() && ambientOcclusion.get() == other.ambientOcclusion.get() &&
-          metallic.get() == other.metallic.get() && roughness.get() == other.roughness.get() && reflectance.get() == other.reflectance.get() &&
-          clearCoat.get() == other.clearCoat.get() && clearCoatRoughness.get() == other.clearCoatRoughness.get() &&
-          anisotropy.get() == other.anisotropy.get());
+          baseClearCoatRoughness == other.baseClearCoatRoughness && baseAnisotropy == other.baseAnisotropy && albedo == other.albedo &&
+          normalMap == other.normalMap && ambientOcclusion == other.ambientOcclusion && metallic == other.metallic && roughness == other.roughness &&
+          reflectance == other.reflectance && clearCoat == other.clearCoat && clearCoatRoughness == other.clearCoatRoughness &&
+          anisotropy == other.anisotropy);
 }
 
 bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
@@ -1681,32 +1722,32 @@ bool TriangleMesh::Material::IsBeforeIgnoringName(const Material &other) const {
     return (baseAnisotropy < other.baseAnisotropy);
   }
 
-  if (albedo.get() != other.albedo.get()) {
-    return (albedo.get() < other.albedo.get());
+  if (albedo != other.albedo) {
+    return (albedo < other.albedo);
   }
-  if (normalMap.get() != other.normalMap.get()) {
-    return (normalMap.get() < other.normalMap.get());
+  if (normalMap != other.normalMap) {
+    return (normalMap < other.normalMap);
   }
-  if (ambientOcclusion.get() != other.ambientOcclusion.get()) {
-    return (ambientOcclusion.get() < other.ambientOcclusion.get());
+  if (ambientOcclusion != other.ambientOcclusion) {
+    return (ambientOcclusion < other.ambientOcclusion);
   }
-  if (metallic.get() != other.metallic.get()) {
-    return (metallic.get() < other.metallic.get());
+  if (metallic != other.metallic) {
+    return (metallic < other.metallic);
   }
-  if (roughness.get() != other.roughness.get()) {
-    return (roughness.get() < other.roughness.get());
+  if (roughness != other.roughness) {
+    return (roughness < other.roughness);
   }
-  if (reflectance.get() != other.reflectance.get()) {
-    return (reflectance.get() < other.reflectance.get());
+  if (reflectance != other.reflectance) {
+    return (reflectance < other.reflectance);
   }
-  if (clearCoat.get() != other.clearCoat.get()) {
-    return (clearCoat.get() < other.clearCoat.get());
+  if (clearCoat != other.clearCoat) {
+    return (clearCoat < other.clearCoat);
   }
-  if (clearCoatRoughness.get() != other.clearCoatRoughness.get()) {
-    return (clearCoatRoughness.get() < other.clearCoatRoughness.get());
+  if (clearCoatRoughness != other.clearCoatRoughness) {
+    return (clearCoatRoughness < other.clearCoatRoughness);
   }
-  if (anisotropy.get() != other.anisotropy.get()) {
-    return (anisotropy.get() < other.anisotropy.get());
+  if (anisotropy != other.anisotropy) {
+    return (anisotropy < other.anisotropy);
   }
   return (false);
 }

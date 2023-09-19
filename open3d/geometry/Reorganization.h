@@ -58,9 +58,11 @@ MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(cons
 MaterialsTriangleUsageWithInvalids GetMaterialsTriangleUsageWithUnassigneds(const TriangleMesh &mesh, const DuplicateConsolidation &consolidation);
 
 //! @returns A vector of meshes, each containing just 1 material from the original mesh.
+//! @note textures_ of the returned meshes isn't populated and the texture indices in the returned materials_ reference the original mesh.textures_.
 std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh);
 //! @returns A vector of meshes, each containing just 1 material from the original mesh.
 //! @pre consolidation must have been created by GetMaterialConsolidation() on mesh.
+//! @note textures_ of the returned meshes isn't populated and the texture indices in the returned materials_ reference the original mesh.textures_.
 std::vector<TriangleMesh> SeparateMeshByMaterial(const TriangleMesh &mesh, const DuplicateConsolidation &material_consolidation);
 
 //! @returns On meshes that have no materials but have textures, returns materials referencing these textures. Returns mesh.materials_ otherwise.
