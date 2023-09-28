@@ -348,9 +348,9 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
   }
   auto reference_texture_if_needed = [&model](std::optional<unsigned int> &open3d_texture, std::optional<unsigned int> &texture_coordinates_index,
                                               std::optional<Eigen::Matrix3d> &texture_transformation, const auto &tiny_gltf_texture) {
-    if (tiny_gltf_texture.index >= 0) {
+    if (tiny_gltf_texture.index >= 0 && tiny_gltf_texture.index < model.textures.size()) {
       const auto source = model.textures[tiny_gltf_texture.index].source;
-      if (source >= 0 && tiny_gltf_texture.texCoord >= 0) {
+      if (source >= 0 && source < model.images.size() && tiny_gltf_texture.texCoord >= 0) {
         auto specific_texture_transformation = std::optional<Eigen::Matrix3d>();
         const auto texture_transformation_extension = tiny_gltf_texture.extensions.find("KHR_texture_transform");
         if (texture_transformation_extension != tiny_gltf_texture.extensions.end()) {
@@ -384,7 +384,7 @@ bool ReadTriangleMeshFromGLTFWithOptions(const std::string &filename, geometry::
     std::optional<Eigen::Matrix3d> texture_transformation_;
   };
   const auto read_material = [&](const tinygltf::Primitive &primitive) {
-    if (primitive.material < 0) {
+    if (primitive.material < 0 || primitive.material >= model.materials.size()) {
       auto default_material = geometry::TriangleMesh::Material();
       default_material.baseColor = geometry::TriangleMesh::Material::MaterialParameter(1.0f, 1.0f, 1.0f);
       return MaterialWithAncillaries{default_material, std::optional<unsigned int>()};
